@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=512, height=256">
+<title>GC Overlay</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  width: 512px;
+  height: 256px;
+  overflow: hidden;
+  background: #1a1a2e;
+  font-family: -apple-system, 'Helvetica Neue', sans-serif;
+  user-select: none;
+  -webkit-user-select: none;
+}
+body.transparent-bg { background: transparent; }
+
+#overlay { position: relative; width: 512px; height: 256px; }
+#controller-svg { display: block; }
+#controller-svg.hidden { display: none; }
+
+/* ── Status ── */
+#status {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  color: #AAAAAA;
+  font-size: 14px;
+  text-align: center;
+  line-height: 1.6;
+  z-index: 100;
+  pointer-events: none;
+}
+#status.hidden { display: none; }
+#status .sub { font-size: 12px; margin-top: 6px; color: #777777; }
+
+/* ── SVG Styles ── */
+
+/* Gates */
+.gate { fill: none; stroke: #AAAAAA; stroke-width: 3; }
+.gate-c { fill: none; stroke: #B8960F; stroke-width: 3; }
+
+/* Stick heads */
+.stick-head { fill: #FFFFFF; stroke: #444444; stroke-width: 2; }
+.stick-head-c { fill: #FFD43B; stroke: #B8960F; stroke-width: 2; }
+
+/* Triggers */
+.trigger-outline { fill: none; stroke: #AAAAAA; stroke-width: 2.5; }
+.trigger-fill { fill: #FFFFFF; }
+.trigger-digital { fill: #FFFFFF; }
+.trigger-label {
+  fill: #666666;
+  font-size: 11px;
+  font-weight: 700;
+  font-family: -apple-system, sans-serif;
+  text-anchor: middle;
+  dominant-baseline: central;
+}
+
+/* Buttons — A */
+.grp-a .shape { fill: none; stroke: #00E196; stroke-width: 3; }
+.grp-a.pressed .shape { fill: #00E196; }
+.grp-a .label { fill: #00E196; }
+.grp-a.pressed .label { fill: #1a1a2e; }
+
+/* Buttons — B */
+.grp-b .shape { fill: none; stroke: #E63E3E; stroke-width: 3; }
+.grp-b.pressed .shape { fill: #E63E3E; }
+.grp-b .label { fill: #E63E3E; }
+.grp-b.pressed .label { fill: #1a1a2e; }
+
+/* Buttons — X arc */
+.grp-x .shape { fill: none; stroke: #999999; stroke-width: 14; stroke-linecap: round; }
+.grp-x.pressed .shape { stroke: #FFFFFF; }
+.grp-x .label { fill: #999999; }
+.grp-x.pressed .label { fill: #FFFFFF; }
+
+/* Buttons — Y arc */
+.grp-y .shape { fill: none; stroke: #999999; stroke-width: 14; stroke-linecap: round; }
+.grp-y.pressed .shape { stroke: #FFFFFF; }
+.grp-y .label { fill: #999999; }
+.grp-y.pressed .label { fill: #FFFFFF; }
+
+/* Buttons — Z */
+.grp-z .shape { fill: none; stroke: #B36CD6; stroke-width: 3; }
+.grp-z.pressed .shape { fill: #B36CD6; }
+.grp-z .label { fill: #B36CD6; }
+.grp-z.pressed .label { fill: #1a1a2e; }
+
+/* Buttons — Start */
+.grp-start .shape { fill: none; stroke: #AAAAAA; stroke-width: 2.5; }
+.grp-start.pressed .shape { fill: #FFFFFF; stroke: #FFFFFF; }
+.grp-start .label { fill: #AAAAAA; }
+.grp-start.pressed .label { fill: #1a1a2e; }
+
+/* D-pad */
+.dpad-arm { fill: none; stroke: #AAAAAA; stroke-width: 2.5; }
+.dpad-arm.pressed { fill: #FFFFFF; stroke: #FFFFFF; }
+.dpad-center { fill: none; stroke: #AAAAAA; stroke-width: 2.5; }
+
+/* Button labels */
+.btn-label {
+  font-family: -apple-system, sans-serif;
+  font-weight: 700;
+  text-anchor: middle;
+  dominant-baseline: central;
+  pointer-events: none;
+  paint-order: stroke;
+  stroke: #000000;
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+
+/* Port indicator */
+.port-label {
+  fill: #AAAAAA;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: -apple-system, sans-serif;
+  text-anchor: end;
+}
+
+/* ── Settings Panel ── */
+#settings-toggle {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  width: 22px;
+  height: 22px;
+  border: none;
+  background: none;
+  color: #555555;
+  font-size: 15px;
+  cursor: pointer;
+  z-index: 200;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+#settings-toggle:hover { color: #AAAAAA; }
+
+#settings {
+  display: none;
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  background: #13132a;
+  z-index: 150;
+  padding: 20px;
+  color: #CCCCCC;
+  font-size: 13px;
+}
+#settings.visible { display: flex; flex-direction: column; gap: 12px; }
+#settings h3 { font-size: 15px; font-weight: 600; color: #FFFFFF; margin-bottom: 4px; }
+.setting-row { display: flex; align-items: center; gap: 10px; }
+.setting-row label { min-width: 80px; }
+.setting-row select, .setting-row button {
+  padding: 4px 10px;
+  border: 1px solid #444444;
+  border-radius: 4px;
+  background: #222244;
+  color: #FFFFFF;
+  font-size: 13px;
+  cursor: pointer;
+}
+.setting-row button:hover { background: #333366; }
+</style>
+</head>
+<body>
+
+<div id="overlay">
+
+  <div id="status">
+    <div>Waiting for GC Adapter...</div>
+    <div class="sub">Plug in your adapter and controller</div>
+  </div>
+
+  <svg id="controller-svg" class="hidden" viewBox="0 0 512 256" width="512" height="256" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <clipPath id="clip-tl"><rect x="31" y="15" width="123" height="20" rx="3"/></clipPath>
+      <clipPath id="clip-tr"><rect x="358" y="15" width="123" height="20" rx="3"/></clipPath>
+    </defs>
+
+    <!-- ── L Trigger ── -->
+    <rect class="trigger-outline" x="30" y="14" width="125" height="22" rx="4"/>
+    <rect class="trigger-fill" id="tl-fill" clip-path="url(#clip-tl)" x="31" y="15" width="0" height="20"/>
+    <rect class="trigger-digital" id="tl-digital" x="148" y="15" width="6" height="20" style="display:none"/>
+    <text class="trigger-label" x="92" y="25">L</text>
+
+    <!-- ── R Trigger ── -->
+    <rect class="trigger-outline" x="357" y="14" width="125" height="22" rx="4"/>
+    <rect class="trigger-fill" id="tr-fill" clip-path="url(#clip-tr)" x="481" y="15" width="0" height="20"/>
+    <rect class="trigger-digital" id="tr-digital" x="358" y="15" width="6" height="20" style="display:none"/>
+    <text class="trigger-label" x="419" y="25">R</text>
+
+    <!-- ── Main Stick ── -->
+    <!-- Regular octagon: center (95,122), radius 55, flat-top orientation -->
+    <polygon class="gate" points="116,71 146,101 146,143 116,173 74,173 44,143 44,101 74,71"/>
+    <circle class="stick-head" id="main-stick" cx="95" cy="122" r="20"/>
+
+    <!-- ── C-Stick ── -->
+    <!-- Regular octagon: center (235,122), radius 40, flat-top orientation -->
+    <polygon class="gate-c" points="250,85 272,107 272,137 250,159 220,159 198,137 198,107 220,85"/>
+    <circle class="stick-head-c" id="c-stick" cx="235" cy="122" r="15"/>
+
+    <!-- ── D-Pad ── centered at (95, 218) -->
+    <rect class="dpad-center" x="87" y="210" width="16" height="16" rx="1"/>
+    <rect class="dpad-arm" id="dpad-up"    x="87" y="190" width="16" height="20" rx="2"/>
+    <rect class="dpad-arm" id="dpad-down"  x="87" y="226" width="16" height="20" rx="2"/>
+    <rect class="dpad-arm" id="dpad-left"  x="67" y="210" width="20" height="16" rx="2"/>
+    <rect class="dpad-arm" id="dpad-right" x="103" y="210" width="20" height="16" rx="2"/>
+
+    <!-- ── Y Button (arc above A) ── -->
+    <!-- Arc centered on A(390,118), radius 37, from -145deg to -35deg -->
+    <g class="grp-y" id="grp-y">
+      <path class="shape" d="M 359.7 96.8 A 37 37 0 0 1 420.3 96.8"/>
+      <text class="btn-label label" x="390" y="78" font-size="12">Y</text>
+    </g>
+
+    <!-- ── X Button (arc right of A) ── -->
+    <!-- Arc centered on A(390,118), radius 37, from -55deg to 55deg -->
+    <g class="grp-x" id="grp-x">
+      <path class="shape" d="M 411.2 87.7 A 37 37 0 0 1 411.2 148.3"/>
+      <text class="btn-label label" x="430" y="118" font-size="12">X</text>
+    </g>
+
+    <!-- ── A Button ── -->
+    <g class="grp-a" id="grp-a">
+      <circle class="shape" cx="390" cy="118" r="26"/>
+      <text class="btn-label label" x="390" y="118" font-size="17">A</text>
+    </g>
+
+    <!-- ── B Button ── -->
+    <g class="grp-b" id="grp-b">
+      <circle class="shape" cx="338" cy="162" r="15"/>
+      <text class="btn-label label" x="338" y="162" font-size="12">B</text>
+    </g>
+
+    <!-- ── Z Button ── -->
+    <g class="grp-z" id="grp-z">
+      <rect class="shape" x="426" y="46" width="50" height="26" rx="13"/>
+      <text class="btn-label label" x="451" y="59" font-size="12">Z</text>
+    </g>
+
+    <!-- ── Start Button ── -->
+    <g class="grp-start" id="grp-start">
+      <circle class="shape" cx="308" cy="130" r="11"/>
+      <text class="btn-label label" x="308" y="130" font-size="9">ST</text>
+    </g>
+
+    <!-- ── Port Indicator ── -->
+    <text class="port-label" id="port-label" x="496" y="244">P1</text>
+  </svg>
+
+  <!-- Settings Toggle -->
+  <button id="settings-toggle" title="Settings">&#9881;</button>
+
+  <!-- Settings Panel -->
+  <div id="settings">
+    <h3>GC Overlay Settings</h3>
+    <div class="setting-row">
+      <label>Port:</label>
+      <select id="port-select">
+        <option value="0">Port 1</option>
+        <option value="1">Port 2</option>
+        <option value="2">Port 3</option>
+        <option value="3">Port 4</option>
+      </select>
+    </div>
+    <div class="setting-row">
+      <label>Background:</label>
+      <select id="bg-select">
+        <option value="dark">Dark</option>
+        <option value="transparent">Transparent (OBS)</option>
+      </select>
+    </div>
+    <div class="setting-row">
+      <label></label>
+      <button id="calibrate-btn">Calibrate Sticks</button>
+    </div>
+    <div class="setting-row" style="margin-top: auto; color: #555; font-size: 11px;">
+      GC Overlay
+    </div>
+  </div>
+
+</div>
+
+<script>
+(function() {
+  'use strict';
+
+  const $ = id => document.getElementById(id);
+  const statusEl = $('status');
+  const svgEl = $('controller-svg');
+  const settingsPanel = $('settings');
+  const settingsToggle = $('settings-toggle');
+  const portSelect = $('port-select');
+  const bgSelect = $('bg-select');
+  const calibrateBtn = $('calibrate-btn');
+
+  // Sticks
+  const mainStick = $('main-stick');
+  const cStick = $('c-stick');
+  const MAIN_STICK_RANGE = 35;
+  const C_STICK_RANGE = 26;
+
+  // Triggers
+  const tlFill = $('tl-fill');
+  const trFill = $('tr-fill');
+  const tlDigital = $('tl-digital');
+  const trDigital = $('tr-digital');
+
+  // Button groups
+  const grpA = $('grp-a');
+  const grpB = $('grp-b');
+  const grpX = $('grp-x');
+  const grpY = $('grp-y');
+  const grpZ = $('grp-z');
+  const grpStart = $('grp-start');
+
+  // D-pad
+  const dpadUp = $('dpad-up');
+  const dpadDown = $('dpad-down');
+  const dpadLeft = $('dpad-left');
+  const dpadRight = $('dpad-right');
+
+  // Port
+  const portLabel = $('port-label');
+
+  // ── URL params ──
+  const params = new URLSearchParams(location.search);
+  if (params.get('bg') === 'transparent') {
+    document.body.classList.add('transparent-bg');
+    bgSelect.value = 'transparent';
+  }
+
+  // ── Settings ──
+  let settingsOpen = false;
+
+  settingsToggle.addEventListener('click', () => {
+    settingsOpen = !settingsOpen;
+    settingsPanel.classList.toggle('visible', settingsOpen);
+  });
+
+  portSelect.addEventListener('change', () => {
+    sendMessage({ port: parseInt(portSelect.value) });
+    portLabel.textContent = 'P' + (parseInt(portSelect.value) + 1);
+  });
+
+  bgSelect.addEventListener('change', () => {
+    document.body.classList.toggle('transparent-bg', bgSelect.value === 'transparent');
+  });
+
+  calibrateBtn.addEventListener('click', () => {
+    sendMessage({ calibrate: true });
+  });
+
+  // ── WebSocket ──
+  let ws = null;
+  let reconnectTimer = null;
+
+  function connect() {
+    const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    ws = new WebSocket(protocol + '//' + location.host + '/ws');
+
+    ws.onopen = () => {
+      if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+    };
+
+    ws.onmessage = (event) => {
+      try { updateOverlay(JSON.parse(event.data)); }
+      catch (e) { /* ignore */ }
+    };
+
+    ws.onclose = () => { ws = null; reconnectTimer = setTimeout(connect, 1000); };
+    ws.onerror = () => { ws.close(); };
+  }
+
+  function sendMessage(data) {
+    if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(data));
+  }
+
+  // ── Update Overlay ──
+  function toggle(el, cls, on) {
+    if (on) el.classList.add(cls);
+    else el.classList.remove(cls);
+  }
+
+  function updateOverlay(state) {
+    if (settingsOpen) return;
+
+    const show = state.adapter_connected && state.connected;
+    toggle(statusEl, 'hidden', show);
+    toggle(svgEl, 'hidden', !show);
+
+    if (!state.adapter_connected) {
+      statusEl.innerHTML = '<div>Waiting for GC Adapter...</div><div class="sub">Plug in your adapter</div>';
+      return;
+    }
+    if (!state.connected) {
+      statusEl.innerHTML = '<div>No controller on Port ' + (state.port + 1) + '</div><div class="sub">Plug in a controller</div>';
+      return;
+    }
+
+    const b = state.buttons;
+
+    // Buttons
+    toggle(grpA, 'pressed', b.a);
+    toggle(grpB, 'pressed', b.b);
+    toggle(grpX, 'pressed', b.x);
+    toggle(grpY, 'pressed', b.y);
+    toggle(grpZ, 'pressed', b.z);
+    toggle(grpStart, 'pressed', b.start);
+
+    // Triggers — analog fill
+    tlFill.setAttribute('width', 123 * state.trigger_l);
+    const rw = 123 * state.trigger_r;
+    trFill.setAttribute('x', 481 - rw);
+    trFill.setAttribute('width', rw);
+
+    // Triggers — digital press indicator
+    tlDigital.style.display = b.l ? '' : 'none';
+    trDigital.style.display = b.r ? '' : 'none';
+
+    // Main stick (center 95, 122)
+    mainStick.setAttribute('cx', 95 + state.stick.x * MAIN_STICK_RANGE);
+    mainStick.setAttribute('cy', 122 - state.stick.y * MAIN_STICK_RANGE);
+
+    // C-Stick (center 235, 122)
+    cStick.setAttribute('cx', 235 + state.cstick.x * C_STICK_RANGE);
+    cStick.setAttribute('cy', 122 - state.cstick.y * C_STICK_RANGE);
+
+    // D-pad
+    toggle(dpadUp, 'pressed', b.dpad_up);
+    toggle(dpadDown, 'pressed', b.dpad_down);
+    toggle(dpadLeft, 'pressed', b.dpad_left);
+    toggle(dpadRight, 'pressed', b.dpad_right);
+  }
+
+  // ── Keyboard shortcuts ──
+  document.addEventListener('keydown', (e) => {
+    if (e.key >= '1' && e.key <= '4') {
+      const port = parseInt(e.key) - 1;
+      portSelect.value = port;
+      sendMessage({ port: port });
+      portLabel.textContent = 'P' + (port + 1);
+    }
+    if (e.key === 'c') sendMessage({ calibrate: true });
+  });
+
+  // ── Start ──
+  connect();
+})();
+</script>
+
+</body>
+</html>
