@@ -2,33 +2,38 @@
 """
 GC Overlay - GameCube Controller Input Display for macOS
 
-Reads input from a GameCube Controller Adapter (WUP-028) via USB
-and displays an overlay suitable for OBS capture.
+Reads controller input from Dolphin (via MemoryWatcher) or a direct
+USB GameCube adapter and displays an overlay suitable for OBS capture.
 
 Usage:
-    python main.py [--port 8069] [--controller 1]
-    python main.py --demo   # Demo mode with animated inputs
+    python main.py                # Dolphin mode (default)
+    python main.py --demo         # Demo mode with animated inputs
+    python main.py --usb          # Direct USB adapter mode
 
 Then open http://localhost:8069 in a browser or add it as an
 OBS Browser Source for a transparent overlay.
 
 Requirements:
-    - macOS: Install GCAdapterDriver (https://github.com/secretkeysio/GCAdapterDriver)
-    - Linux: Add a udev rule for the adapter
-    - pip install pyusb aiohttp
+    - Dolphin mode: Dolphin/Project Rio with MemoryWatcher (built-in)
+    - USB mode: pyusb, libusb, GCAdapterDriver (macOS)
+    - pip install aiohttp
 """
 
 import argparse
 import math
+import os
 import signal
 import sys
-import threading
 import time
 
 from aiohttp import web
 
-from gc_adapter import GCAdapter
+from _version import __version__
+from dolphin_adapter import DolphinAdapter, load_game_profile, save_game_profile
+from resources import resource_path
 from server import create_app
+
+PROFILES_DIR = resource_path('game_profiles')
 
 
 class DemoAdapter:
@@ -97,6 +102,10 @@ def main():
         description='GC Overlay - GameCube Controller Input Display',
     )
     parser.add_argument(
+        '--version', action='version', version=__version__,
+        help='Print the gc-overlay version and exit',
+    )
+    parser.add_argument(
         '--port', type=int, default=8069,
         help='HTTP server port (default: 8069)',
     )
@@ -108,17 +117,75 @@ def main():
         '--demo', action='store_true',
         help='Demo mode with animated controller inputs',
     )
+    parser.add_argument(
+        '--usb', action='store_true',
+        help='Read from a direct USB GC adapter (requires pyusb + libusb)',
+    )
+    parser.add_argument(
+        '--dolphin-dir', type=str, default=None,
+        help='Override Dolphin/Project Rio config directory path',
+    )
+    parser.add_argument(
+        '--game', type=str, default='mario_superstar_baseball',
+        help='Game profile name (default: mario_superstar_baseball)',
+    )
+    parser.add_argument(
+        '--dolphin-set-addr', type=str, default=None, metavar='HEX_ADDR',
+        help='Set controller base address for the game profile (e.g. 803C77B8)',
+    )
     args = parser.parse_args()
+
+    profile_path = os.path.join(PROFILES_DIR, f"{args.game}.json")
+
+    # Handle --dolphin-set-addr: update profile and exit
+    if args.dolphin_set_addr:
+        addr = args.dolphin_set_addr.strip()
+        # Validate hex
+        try:
+            int(addr, 16)
+        except ValueError:
+            print(f"Error: '{addr}' is not a valid hex address.")
+            sys.exit(1)
+        if not os.path.exists(profile_path):
+            print(f"Error: Game profile not found: {profile_path}")
+            sys.exit(1)
+        profile = load_game_profile(profile_path)
+        profile['controller_base'] = addr
+        save_game_profile(profile_path, profile)
+        print(f"Set controller_base = 0x{addr.upper()} in {profile_path}")
+        sys.exit(0)
 
     if args.demo:
         adapter = DemoAdapter()
-    else:
+    elif args.usb:
+        try:
+            from gc_adapter import GCAdapter
+        except ImportError:
+            print("Error: USB mode requires pyusb. Install it with:")
+            print("  pip install pyusb")
+            print("\nYou also need libusb:")
+            print("  macOS: brew install libusb")
+            print("  Linux: sudo apt install libusb-1.0-0-dev")
+            sys.exit(1)
         adapter = GCAdapter()
+    else:
+        # Default: Dolphin mode via MemoryWatcher
+        if not os.path.exists(profile_path):
+            print(f"Error: Game profile not found: {profile_path}")
+            print(f"Available profiles in {PROFILES_DIR}/")
+            sys.exit(1)
+        adapter = DolphinAdapter(profile_path, dolphin_dir=args.dolphin_dir)
 
     adapter.start()
     app = create_app(adapter, port=args.controller - 1)
 
-    mode = "DEMO" if args.demo else "LIVE"
+    if args.demo:
+        mode = "DEMO"
+    elif args.usb:
+        mode = "USB"
+    else:
+        mode = "DOLPHIN"
+
     print(f"\n  GC Overlay [{mode}]")
     print(f"  Controller port: {args.controller}")
     print(f"  Overlay URL:     http://localhost:{args.port}")

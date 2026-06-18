@@ -11,8 +11,10 @@ import os
 
 from aiohttp import web
 
+from resources import resource_path
 
-STATIC_DIR = os.path.join(os.path.dirname(__file__), 'static')
+
+STATIC_DIR = resource_path('static')
 
 
 async def index_handler(request):
@@ -24,7 +26,18 @@ async def websocket_handler(request):
     await ws.prepare(request)
     app = request.app
 
-    app['ws_clients'].add(ws)
+    # Per-client port: check ?port= query param, fall back to app default
+    initial_port = app['active_port']
+    port_param = request.query.get('port')
+    if port_param is not None:
+        try:
+            p = int(port_param)
+            if 0 <= p <= 3:
+                initial_port = p
+        except ValueError:
+            pass
+
+    app['ws_clients'][ws] = initial_port
     try:
         async for msg in ws:
             if msg.type == web.WSMsgType.TEXT:
@@ -33,37 +46,44 @@ async def websocket_handler(request):
                     if 'port' in data:
                         port = int(data['port'])
                         if 0 <= port <= 3:
-                            app['active_port'] = port
+                            app['ws_clients'][ws] = port
                     if data.get('calibrate'):
-                        app['adapter'].calibrate(app['active_port'])
+                        app['adapter'].calibrate(app['ws_clients'].get(ws, 0))
                 except (json.JSONDecodeError, ValueError):
                     pass
             elif msg.type == web.WSMsgType.ERROR:
                 break
     finally:
-        app['ws_clients'].discard(ws)
+        app['ws_clients'].pop(ws, None)
     return ws
 
 
 async def broadcast_loop(app):
-    """Continuously broadcast controller state to all WebSocket clients."""
+    """Continuously broadcast controller state to all WebSocket clients.
+
+    Each client receives state for its own selected port.
+    """
     adapter = app['adapter']
     try:
         while True:
-            port = app['active_port']
-            state = adapter.get_state(port)
-            state['port'] = port
-            state['adapter_connected'] = adapter.connected
-
-            msg = json.dumps(state)
-
+            # Cache states per port to avoid redundant calls
+            cached_states = {}
             dead = set()
-            for ws in app['ws_clients']:
+
+            for ws, port in list(app['ws_clients'].items()):
+                if port not in cached_states:
+                    state = adapter.get_state(port)
+                    state['port'] = port
+                    state['adapter_connected'] = adapter.connected
+                    cached_states[port] = json.dumps(state)
+
                 try:
-                    await ws.send_str(msg)
+                    await ws.send_str(cached_states[port])
                 except Exception:
                     dead.add(ws)
-            app['ws_clients'] -= dead
+
+            for ws in dead:
+                app['ws_clients'].pop(ws, None)
 
             await asyncio.sleep(1 / 120)
     except asyncio.CancelledError:
@@ -78,7 +98,7 @@ async def on_cleanup(app):
     app['broadcast_task'].cancel()
     await app['broadcast_task']
 
-    for ws in set(app['ws_clients']):
+    for ws in list(app['ws_clients']):
         await ws.close()
 
 
@@ -87,7 +107,7 @@ def create_app(adapter, port=0):
     app = web.Application()
     app['adapter'] = adapter
     app['active_port'] = port
-    app['ws_clients'] = set()
+    app['ws_clients'] = {}  # {WebSocketResponse: port_index}
 
     app.router.add_get('/', index_handler)
     app.router.add_get('/ws', websocket_handler)

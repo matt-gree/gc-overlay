@@ -1,0 +1,18 @@
+{
+  "game_id": "GYQE01",
+  "game_name": "Mario Superstar Baseball (NTSC-U v1.0)",
+  "controller_base": "803C77B8",
+  "controller_stride": 32,
+  "port_count": 4,
+  "field_offsets": {
+    "buttons": 0,
+    "sticks": 16,
+    "triggers": 20
+  },
+  "normalization": {
+    "stick_range": 72,
+    "cstick_range": 59,
+    "trigger_max": 150
+  },
+  "notes": "Addresses from M'Overlay (base 0x803C77B8, stride 0x20 per port)"
+}

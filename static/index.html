@@ -73,13 +73,13 @@ body.transparent-bg { background: transparent; }
 .grp-b.pressed .label { fill: #1a1a2e; }
 
 /* Buttons — X arc */
-.grp-x .shape { fill: none; stroke: #999999; stroke-width: 14; stroke-linecap: round; }
+.grp-x .shape { fill: none; stroke: #999999; stroke-width: 20; stroke-linecap: round; }
 .grp-x.pressed .shape { stroke: #FFFFFF; }
 .grp-x .label { fill: #999999; }
 .grp-x.pressed .label { fill: #FFFFFF; }
 
 /* Buttons — Y arc */
-.grp-y .shape { fill: none; stroke: #999999; stroke-width: 14; stroke-linecap: round; }
+.grp-y .shape { fill: none; stroke: #999999; stroke-width: 20; stroke-linecap: round; }
 .grp-y.pressed .shape { stroke: #FFFFFF; }
 .grp-y .label { fill: #999999; }
 .grp-y.pressed .label { fill: #FFFFFF; }
@@ -175,8 +175,8 @@ body.transparent-bg { background: transparent; }
 <div id="overlay">
 
   <div id="status">
-    <div>Waiting for GC Adapter...</div>
-    <div class="sub">Plug in your adapter and controller</div>
+    <div>Waiting for controller data...</div>
+    <div class="sub">Start the overlay before launching Dolphin</div>
   </div>
 
   <svg id="controller-svg" class="hidden" viewBox="0 0 512 256" width="512" height="256" xmlns="http://www.w3.org/2000/svg">
@@ -199,13 +199,21 @@ body.transparent-bg { background: transparent; }
 
     <!-- ── Main Stick ── -->
     <!-- Regular octagon: center (95,122), radius 55, flat-top orientation -->
-    <polygon class="gate" points="116,71 146,101 146,143 116,173 74,173 44,143 44,101 74,71"/>
-    <circle class="stick-head" id="main-stick" cx="95" cy="122" r="20"/>
+    <polygon
+      class="gate"
+      points="116,71 146,101 146,143 116,173 74,173 44,143 44,101 74,71"
+      transform="rotate(22.5 95 122)"
+    />
+    <circle class="stick-head" id="main-stick" cx="95" cy="122" r="30"/>
 
     <!-- ── C-Stick ── -->
     <!-- Regular octagon: center (235,122), radius 40, flat-top orientation -->
-    <polygon class="gate-c" points="250,85 272,107 272,137 250,159 220,159 198,137 198,107 220,85"/>
-    <circle class="stick-head-c" id="c-stick" cx="235" cy="122" r="15"/>
+    <polygon
+      class="gate-c"
+      points="250,85 272,107 272,137 250,159 220,159 198,137 198,107 220,85"
+      transform="rotate(22.5 235 122)"
+    />
+    <circle class="stick-head-c" id="c-stick" cx="235" cy="122" r="20"/>
 
     <!-- ── D-Pad ── centered at (95, 218) -->
     <rect class="dpad-center" x="87" y="210" width="16" height="16" rx="1"/>
@@ -215,17 +223,17 @@ body.transparent-bg { background: transparent; }
     <rect class="dpad-arm" id="dpad-right" x="103" y="210" width="20" height="16" rx="2"/>
 
     <!-- ── Y Button (arc above A) ── -->
-    <!-- Arc centered on A(390,118), radius 37, from -145deg to -35deg -->
+    <!-- Arc centered on A(390,118), radius 45, from 85deg to 120deg (35deg span) -->
     <g class="grp-y" id="grp-y">
-      <path class="shape" d="M 359.7 96.8 A 37 37 0 0 1 420.3 96.8"/>
-      <text class="btn-label label" x="390" y="78" font-size="12">Y</text>
+      <path class="shape" d="M 367.5 79.0 A 45 45 0 0 1 393.9 73.2"/>
+      <text class="btn-label label" x="380" y="74" font-size="12">Y</text>
     </g>
 
     <!-- ── X Button (arc right of A) ── -->
-    <!-- Arc centered on A(390,118), radius 37, from -55deg to 55deg -->
+    <!-- Arc centered on A(390,118), radius 45, from 0deg to 35deg (35deg span) -->
     <g class="grp-x" id="grp-x">
-      <path class="shape" d="M 411.2 87.7 A 37 37 0 0 1 411.2 148.3"/>
-      <text class="btn-label label" x="430" y="118" font-size="12">X</text>
+      <path class="shape" d="M 426.9 92.2 A 45 45 0 0 1 435.0 118.0"/>
+      <text class="btn-label label" x="432.5" y="103" font-size="12">X</text>
     </g>
 
     <!-- ── A Button ── -->
@@ -338,6 +346,18 @@ body.transparent-bg { background: transparent; }
     bgSelect.value = 'transparent';
   }
 
+  // Initial port from URL param (0-indexed internally, 1-indexed in param)
+  let initialPort = 0;
+  const portParam = params.get('port');
+  if (portParam !== null) {
+    const p = parseInt(portParam);
+    if (p >= 1 && p <= 4) {
+      initialPort = p - 1;
+      portSelect.value = initialPort;
+      portLabel.textContent = 'P' + p;
+    }
+  }
+
   // ── Settings ──
   let settingsOpen = false;
 
@@ -345,6 +365,12 @@ body.transparent-bg { background: transparent; }
     settingsOpen = !settingsOpen;
     settingsPanel.classList.toggle('visible', settingsOpen);
   });
+
+  // Hide port selector when port is set via URL param (controlled by PRSH/OBS)
+  const portLocked = portParam !== null;
+  if (portLocked) {
+    portSelect.closest('.setting-row').style.display = 'none';
+  }
 
   portSelect.addEventListener('change', () => {
     sendMessage({ port: parseInt(portSelect.value) });
@@ -365,7 +391,8 @@ body.transparent-bg { background: transparent; }
 
   function connect() {
     const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    ws = new WebSocket(protocol + '//' + location.host + '/ws');
+    const currentPort = parseInt(portSelect.value);
+    ws = new WebSocket(protocol + '//' + location.host + '/ws?port=' + currentPort);
 
     ws.onopen = () => {
       if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
@@ -398,7 +425,7 @@ body.transparent-bg { background: transparent; }
     toggle(svgEl, 'hidden', !show);
 
     if (!state.adapter_connected) {
-      statusEl.innerHTML = '<div>Waiting for GC Adapter...</div><div class="sub">Plug in your adapter</div>';
+      statusEl.innerHTML = '<div>Waiting for controller data...</div><div class="sub">Start the overlay before launching Dolphin</div>';
       return;
     }
     if (!state.connected) {
