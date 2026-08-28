@@ -27,19 +27,56 @@ body.transparent-bg { background: transparent; }
 
 /* ── SVG Styles ── */
 
+/* Keyline (the .halo <use> below the controller group)
+   Every stroke is drawn twice: once by the halo layer in black and a few px
+   wider, once by the real element on top. That black ring is what keeps the
+   overlay readable over a bright capture — a thin grey outline on a green
+   field has almost no luminance separation and vanishes when the source is
+   scaled down into a stream layout.
+
+   The halo layer sits entirely *behind* the controller, so halos may overlap
+   each other freely; no halo can ever cover a real shape. Every stroked rule
+   below therefore reads its paint through --halo-c / --halo-w, whose
+   defaults (the element's own colour, no extra width) are what the real copy
+   draws with. Text carries its own keyline via paint-order instead, so the
+   status line — which is outside the halo group — gets one too.
+
+   Black is fully opaque, like everything else here. See the No Alpha rule. */
+.halo { --halo-c: #000000; --halo-w: 4px; pointer-events: none; }
+
 /* Gates */
-.gate { fill: none; stroke: #AAAAAA; stroke-width: 4; stroke-linejoin: round; }
-.gate-c { fill: none; stroke: #B8960F; stroke-width: 4; stroke-linejoin: round; }
+.gate {
+  fill: var(--idle-neutral, none); stroke: var(--halo-c, #C8C8C8); stroke-linejoin: round;
+  stroke-width: calc(4px + var(--halo-w, 0px));
+}
+.gate-c {
+  fill: var(--idle-gold, none); stroke: var(--halo-c, #D4A017); stroke-linejoin: round;
+  stroke-width: calc(4px + var(--halo-w, 0px));
+}
 
 /* Stick heads */
-.stick-head { fill: #FFFFFF; stroke: #444444; stroke-width: 2.5; }
-.stick-head-c { fill: #FFD43B; stroke: #8A7009; stroke-width: 2.5; }
+/* Stick heads — the one keyline that is NOT drawn by the halo layer. A head
+   sits over its gate, so its ring has to sit over the gate line too; from
+   behind, the gate's own stroke cuts across it. The heads come after the
+   gates in document order, so painting the ring here puts it on top. */
+.stick-head {
+  fill: #FFFFFF; stroke: var(--head-ring, #000000);
+  stroke-width: var(--head-ring-w, 4px);
+}
+.stick-head-c {
+  fill: #FFD43B; stroke: var(--head-ring-c, #000000);
+  stroke-width: var(--head-ring-w, 4px);
+}
 
 /* Triggers */
-.trigger-outline { fill: none; stroke: #AAAAAA; stroke-width: 3.5; }
+.trigger-outline {
+  fill: var(--idle-neutral, none); stroke: var(--halo-c, #C8C8C8);
+  stroke-width: calc(3.5px + var(--halo-w, 0px));
+}
 .trigger-fill { fill: #FFFFFF; }
 .trigger-label {
-  fill: #777777;
+  display: var(--label-display, inline);
+  fill: #BBBBBB;
   font-size: 16px;
   font-weight: 700;
   font-family: -apple-system, sans-serif;
@@ -48,90 +85,174 @@ body.transparent-bg { background: transparent; }
 }
 
 /* Buttons — A */
-.grp-a .shape { fill: none; stroke: #00E196; stroke-width: 4; }
+.grp-a .shape {
+  fill: var(--idle-a, none); stroke: var(--halo-c, #00E196);
+  stroke-width: calc(4px + var(--halo-w, 0px));
+}
 .grp-a.pressed .shape { fill: #00E196; }
 .grp-a .label { fill: #00E196; }
 .grp-a.pressed .label { fill: #10241d; }
 
 /* Buttons — B */
-.grp-b .shape { fill: none; stroke: #E63E3E; stroke-width: 4; }
+.grp-b .shape {
+  fill: var(--idle-b, none); stroke: var(--halo-c, #E63E3E);
+  stroke-width: calc(4px + var(--halo-w, 0px));
+}
 .grp-b.pressed .shape { fill: #E63E3E; }
 .grp-b .label { fill: #E63E3E; }
 .grp-b.pressed .label { fill: #2a1010; }
 
 /* Buttons — X / Y beans */
 .grp-x .shape, .grp-y .shape {
-  fill: none; stroke: #AAAAAA; stroke-width: 4; stroke-linejoin: round;
+  fill: var(--idle-neutral, none); stroke: var(--halo-c, #C8C8C8); stroke-linejoin: round;
+  stroke-width: calc(4px + var(--halo-w, 0px));
 }
-.grp-x.pressed .shape, .grp-y.pressed .shape { fill: #FFFFFF; stroke: #FFFFFF; }
-.grp-x .label, .grp-y .label { fill: #AAAAAA; }
+.grp-x.pressed .shape, .grp-y.pressed .shape {
+  fill: #FFFFFF; stroke: var(--halo-c, #FFFFFF);
+}
+.grp-x .label, .grp-y .label { fill: #C8C8C8; }
 .grp-x.pressed .label, .grp-y.pressed .label { fill: #202020; }
 
 /* Buttons — Z */
-.grp-z .shape { fill: none; stroke: #B36CD6; stroke-width: 4; }
+.grp-z .shape {
+  fill: var(--idle-z, none); stroke: var(--halo-c, #B36CD6);
+  stroke-width: calc(4px + var(--halo-w, 0px));
+}
 .grp-z.pressed .shape { fill: #B36CD6; }
 .grp-z .label { fill: #B36CD6; }
 .grp-z.pressed .label { fill: #201029; }
 
 /* Buttons — Start */
-.grp-start .shape { fill: none; stroke: #AAAAAA; stroke-width: 3.5; }
-.grp-start.pressed .shape { fill: #FFFFFF; stroke: #FFFFFF; }
-.grp-start .label { fill: #AAAAAA; }
+.grp-start .shape {
+  fill: var(--idle-neutral, none); stroke: var(--halo-c, #C8C8C8);
+  stroke-width: calc(3.5px + var(--halo-w, 0px));
+}
+.grp-start.pressed .shape { fill: #FFFFFF; stroke: var(--halo-c, #FFFFFF); }
+.grp-start .label { fill: #C8C8C8; stroke-width: 1.5px; }  /* ST is small — a full keyline swallows the button */
 .grp-start.pressed .label { fill: #1a1a2e; }
 
 /* D-pad — arms fill on press, a single plus outline sits on top so the
    cross reads as one shape instead of five stroked boxes. */
-.dpad-arm { fill: none; stroke: none; }
+.dpad-arm { fill: var(--idle-neutral, none); stroke: none; }
 .dpad-arm.pressed { fill: #FFFFFF; }
 .dpad-outline {
-  fill: none;
-  stroke: #AAAAAA;
-  stroke-width: 4;
+  fill: none;  /* sits over the arms — a fill here would hide them */
+  stroke: var(--halo-c, #C8C8C8);
+  stroke-width: calc(4px + var(--halo-w, 0px));
   stroke-linejoin: round;
 }
 
-/* Button labels */
+/* Button labels — glyphs carry their own black keyline. paint-order puts the
+   stroke behind the fill, so the letter keeps its full weight and the ring
+   grows outward only. */
+.btn-label, .arc-label, .trigger-label, .port-label,
+.status-main, .status-sub {
+  stroke: #000000;
+  stroke-linejoin: round;
+  paint-order: stroke;
+}
 .btn-label {
+  display: var(--label-display, inline);
   font-family: -apple-system, sans-serif;
   font-weight: 700;
   text-anchor: middle;
   dominant-baseline: central;
   pointer-events: none;
+  stroke-width: 3px;
 }
 .arc-label {
+  display: var(--label-display, inline);
   font-family: -apple-system, sans-serif;
   font-weight: 700;
   text-anchor: middle;
   dominant-baseline: central;
   pointer-events: none;
+  stroke-width: 2.5px;
 }
+.trigger-label { stroke-width: 2.5px; }
 
-/* Letters off — see the show_labels setting */
-#controller-svg.no-labels .btn-label,
-#controller-svg.no-labels .arc-label,
-#controller-svg.no-labels .trigger-label { display: none; }
+/* …except while the button is held. A pressed label is a very dark tint of its
+   own hue sitting on an opaque bright fill — it already has all the contrast
+   it needs, and a black ring around a dark glyph only thickens it into a blob.
+   This selector lives entirely inside the halo's shadow tree, so it clears the
+   clone's stroke too; otherwise the wider clone would still ring the letter
+   from behind. The trigger glyphs are deliberately not covered: they sit on a
+   white bar at full press and the keyline is what keeps them readable. */
+.pressed .label { stroke: none; }
+
+/* Letters off — see the show_labels setting.
+   This has to travel as an *inherited* property rather than a descendant
+   selector: the halo <use> renders a shadow tree, and a selector rooted
+   outside it (#controller-svg …) does not match the cloned glyphs, so the
+   halo copies would keep drawing letters after the real ones went away.
+   Rules that live entirely inside the tree (.gate, .grp-a .shape, .pressed)
+   match fine — only the boundary-crossing ones need this treatment. */
+#controller-svg.no-labels { --label-display: none; }
 
 /* Port indicator */
 .port-label {
-  fill: #AAAAAA;
+  fill: #C8C8C8;
   font-size: 13px;
   font-weight: 600;
   font-family: -apple-system, sans-serif;
   text-anchor: end;
+  stroke-width: 2.5px;
 }
 
 /* Status text (inside the SVG so it scales with everything else) */
 .status-main {
-  fill: #AAAAAA;
+  fill: #C8C8C8;
   font-size: 14px;
   font-family: -apple-system, sans-serif;
   text-anchor: middle;
+  stroke-width: 2.5px;
 }
 .status-sub {
-  fill: #777777;
+  fill: #999999;
   font-size: 11px;
   font-family: -apple-system, sans-serif;
   text-anchor: middle;
+  stroke-width: 2px;
+}
+
+
+/* ── Toggles that have to cross the halo's shadow boundary ── */
+
+/* Idle fill — a dark plate inside every unpressed shape, so a button reads as
+   a filled chip rather than a hollow ring. Off by default: it is a large
+   visual change, and the hollow look is what PRSH already ships.
+
+   Like --label-display, these travel as *inherited* custom properties rather
+   than descendant selectors, because #controller-svg is outside the halo
+   <use>'s shadow tree. The halo's clones pick the fills up too, but they are
+   covered exactly by the real shapes, so it costs nothing.
+
+   Tints of each button's own hue rather than one flat grey — dark enough to
+   read as unlit next to the pressed colour, warm enough to keep the button's
+   identity when the letters are off. */
+#controller-svg.idle-fill {
+  --idle-neutral: #1E1E24;
+  --idle-a: #0D2B22;
+  --idle-b: #2E1414;
+  --idle-z: #241436;
+  --idle-gold: #2B2209;
+}
+
+/* Keyline off — dropping the whole halo layer takes every cloned stroke with
+   it, so this one *can* be a plain selector: .halo is a light-DOM child. The
+   glyph keylines are drawn by the real elements (see paint-order above), so
+   they have to be cleared separately. */
+#controller-svg.no-keyline .halo { display: none; }
+#controller-svg.no-keyline .btn-label,
+#controller-svg.no-keyline .arc-label,
+#controller-svg.no-keyline .trigger-label,
+#controller-svg.no-keyline .port-label,
+#controller-svg.no-keyline .status-main,
+#controller-svg.no-keyline .status-sub { stroke: none; }
+#controller-svg.no-keyline {
+  --head-ring: #444444;
+  --head-ring-c: #8A7009;
+  --head-ring-w: 2.5px;
 }
 
 /* ── Settings Panel ── */
@@ -203,6 +324,10 @@ body.transparent-bg { background: transparent; }
     </g>
 
     <!-- ── Controller ── -->
+    <!-- Keyline layer: the whole controller redrawn behind itself in black,
+         a few px wider. See the .halo CSS above. It inherits the controller's
+         own pressed/hidden state because it is the same DOM. -->
+    <use class="halo" href="#controller-group"/>
     <g id="controller-group" class="hidden">
 
       <!-- L Trigger -->
@@ -230,51 +355,51 @@ body.transparent-bg { background: transparent; }
         points="278,100 266.9,126.9 240,138 213.1,126.9 202,100 213.1,73.1 240,62 266.9,73.1"/>
       <circle class="stick-head-c" id="c-stick" cx="240" cy="100" r="20"/>
 
-      <!-- D-Pad — center (170,138), 20px arms, tucked into the diagonal gap
+      <!-- D-Pad — center (170,138), 18px arms, tucked into the diagonal gap
            below and between the two gates so it costs no extra height.
            The grey outline is a plain square-cornered plus. Each arm's fill
            is the whole arm plus a 45° point into the middle, so a held
            direction reads as an arrow aimed at the centre; the four points
            meet exactly at (170,138) and tile the centre square. -->
       <polygon class="dpad-arm" id="dpad-up"
-        points="160,107 180,107 180,128 170,138 160,128"/>
+        points="161,110 179,110 179,129 170,138 161,129"/>
       <polygon class="dpad-arm" id="dpad-down"
-        points="160,169 180,169 180,148 170,138 160,148"/>
+        points="161,166 179,166 179,147 170,138 161,147"/>
       <polygon class="dpad-arm" id="dpad-left"
-        points="139,128 139,148 160,148 170,138 160,128"/>
+        points="142,129 142,147 161,147 170,138 161,129"/>
       <polygon class="dpad-arm" id="dpad-right"
-        points="201,128 201,148 180,148 170,138 180,128"/>
+        points="198,129 198,147 179,147 170,138 179,129"/>
       <path class="dpad-outline"
-        d="M 160 107 L 180 107 L 180 128 L 201 128 L 201 148 L 180 148
-           L 180 169 L 160 169 L 160 148 L 139 148 L 139 128 L 160 128 Z"/>
+        d="M 161 110 L 179 110 L 179 129 L 198 129 L 198 147 L 179 147
+           L 179 166 L 161 166 L 161 147 L 142 147 L 142 129 L 161 129 Z"/>
 
-      <!-- Y Button — bean above A, centered on A(398,122), centreline radius
-           60, half-thickness 16, spanning -128° to -88°. Outlined rather than
+      <!-- Y Button — bean above A, centered on A(398,126), centreline radius
+           62, half-thickness 16, spanning -128° to -88°. Outlined rather than
            drawn as a thick stroke so it fills on press like A/B/Z/Start. -->
       <g class="grp-y" id="grp-y">
-        <path class="shape" d="M 351.21 62.11
-          A 76 76 0 0 1 400.65 46.05
-          A 16 16 0 0 1 399.54 78.03
-          A 44 44 0 0 0 370.91 87.33
-          A 16 16 0 0 1 351.21 62.11 Z"/>
-        <text class="arc-label label" x="379.5" y="64.9" font-size="17">Y</text>
+        <path class="shape" d="M 349.98 64.54
+          A 78 78 0 0 1 400.72 48.05
+          A 16 16 0 0 1 399.61 80.03
+          A 46 46 0 0 0 369.68 89.75
+          A 16 16 0 0 1 349.98 64.54 Z"/>
+        <text class="arc-label label" x="378.8" y="67.0" font-size="17">Y</text>
       </g>
 
       <!-- X Button — bean right of A, same construction as Y, spanning
            -30° to 10° so it straddles A's centerline. -->
       <g class="grp-x" id="grp-x">
-        <path class="shape" d="M 463.82 84.0
-          A 76 76 0 0 1 472.85 135.2
-          A 16 16 0 0 1 441.33 129.64
-          A 44 44 0 0 0 436.11 100.0
-          A 16 16 0 0 1 463.82 84.0 Z"/>
-        <text class="arc-label label" x="457.1" y="111.6" font-size="17">X</text>
+        <path class="shape" d="M 465.55 87.0
+          A 78 78 0 0 1 474.82 139.54
+          A 16 16 0 0 1 443.3 133.99
+          A 46 46 0 0 0 437.84 103.0
+          A 16 16 0 0 1 465.55 87.0 Z"/>
+        <text class="arc-label label" x="458" y="115.2" font-size="17">X</text>
       </g>
 
       <!-- A Button -->
       <g class="grp-a" id="grp-a">
-        <circle class="shape" cx="398" cy="122" r="36"/>
-        <text class="btn-label label" x="398" y="122" font-size="25">A</text>
+        <circle class="shape" cx="398" cy="126" r="34"/>
+        <text class="btn-label label" x="398" y="126" font-size="24">A</text>
       </g>
 
       <!-- B Button -->
@@ -336,6 +461,14 @@ body.transparent-bg { background: transparent; }
       <input type="checkbox" id="labels-check">
     </div>
     <div class="setting-row">
+      <label>Keyline:</label>
+      <input type="checkbox" id="keyline-check">
+    </div>
+    <div class="setting-row">
+      <label>Idle fill:</label>
+      <input type="checkbox" id="idle-fill-check">
+    </div>
+    <div class="setting-row">
       <label></label>
       <button id="calibrate-btn">Calibrate Sticks</button>
     </div>
@@ -362,6 +495,8 @@ body.transparent-bg { background: transparent; }
   const portLabelCheck = $('port-label-check');
   const statusCheck = $('status-check');
   const labelsCheck = $('labels-check');
+  const keylineCheck = $('keyline-check');
+  const idleFillCheck = $('idle-fill-check');
   const calibrateBtn = $('calibrate-btn');
 
   // Sticks — travel splits the difference between the gate's notches
@@ -425,6 +560,8 @@ body.transparent-bg { background: transparent; }
     settingsToggle.classList.toggle('visible', !!cfg.show_gear);
     portLabel.classList.toggle('hidden', !cfg.show_port_label);
     svgEl.classList.toggle('no-labels', !cfg.show_labels);
+    svgEl.classList.toggle('no-keyline', !cfg.show_keyline);
+    svgEl.classList.toggle('idle-fill', !!cfg.show_idle_fill);
     portLabel.textContent = 'P' + cfg.port;
 
     // Keep the panel controls in sync with whatever drove the change.
@@ -433,6 +570,8 @@ body.transparent-bg { background: transparent; }
     portLabelCheck.checked = !!cfg.show_port_label;
     statusCheck.checked = !!cfg.show_status;
     labelsCheck.checked = !!cfg.show_labels;
+    keylineCheck.checked = !!cfg.show_keyline;
+    idleFillCheck.checked = !!cfg.show_idle_fill;
 
     if (!cfg.show_gear && settingsOpen) {
       settingsOpen = false;
@@ -466,6 +605,14 @@ body.transparent-bg { background: transparent; }
 
   statusCheck.addEventListener('change', () => {
     setLocal({ show_status: statusCheck.checked });
+  });
+
+  keylineCheck.addEventListener('change', () => {
+    setLocal({ show_keyline: keylineCheck.checked });
+  });
+
+  idleFillCheck.addEventListener('change', () => {
+    setLocal({ show_idle_fill: idleFillCheck.checked });
   });
 
   labelsCheck.addEventListener('change', () => {

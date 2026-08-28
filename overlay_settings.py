@@ -27,6 +27,8 @@ DEFAULTS = {
     'show_port_label': True, # "P1" label, bottom-right
     'show_status': True,     # "Waiting for controller data..." text
     'show_labels': True,     # A/B/X/Y/Z/ST/L/R glyphs on the controller
+    'show_keyline': True,    # black outline behind every stroke and glyph
+    'show_idle_fill': False, # dark fill inside unpressed buttons
 }
 
 # Short query-string aliases -> canonical setting key. The canonical keys work
@@ -38,6 +40,9 @@ ALIASES = {
     'port_label': 'show_port_label',
     'status': 'show_status',
     'labels': 'show_labels',
+    'keyline': 'show_keyline',
+    'idlefill': 'show_idle_fill',
+    'idle_fill': 'show_idle_fill',
 }
 
 _TRUE = {'1', 'true', 'yes', 'on'}
@@ -81,6 +86,8 @@ COERCERS = {
     'show_port_label': _coerce_bool,
     'show_status': _coerce_bool,
     'show_labels': _coerce_bool,
+    'show_keyline': _coerce_bool,
+    'show_idle_fill': _coerce_bool,
 }
 
 

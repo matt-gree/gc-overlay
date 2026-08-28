@@ -185,6 +185,14 @@ def main():
         help='Hide the A/B/X/Y/Z/ST/L/R letters on the controller',
     )
     parser.add_argument(
+        '--no-keyline', action='store_true',
+        help='Drop the black keyline drawn behind every stroke and letter',
+    )
+    parser.add_argument(
+        '--idle-fill', action='store_true',
+        help='Fill unpressed buttons with a dark tint of their own colour',
+    )
+    parser.add_argument(
         '--demo', action='store_true',
         help='Demo mode with animated controller inputs',
     )
@@ -265,6 +273,8 @@ def main():
         'show_port_label': not args.no_port_label,
         'show_status': not args.no_status,
         'show_labels': not args.no_labels,
+        'show_keyline': not args.no_keyline,
+        'show_idle_fill': args.idle_fill,
     })
 
     if args.demo:

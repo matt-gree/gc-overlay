@@ -81,6 +81,8 @@ python main.py --no-gear          # Hide the settings gear
 python main.py --no-port-label    # Hide the "P1" label
 python main.py --no-status        # Hide the "Waiting for controller data..." text
 python main.py --no-labels        # Hide the A/B/X/Y/Z/ST/L/R letters
+python main.py --no-keyline       # Drop the black keyline behind every stroke
+python main.py --idle-fill        # Fill unpressed buttons with a dark tint
 ```
 
 Then either:
@@ -118,9 +120,26 @@ Add `&labels=0` to drop the A/B/X/Y/Z/ST/L/R letters and show shapes only.
 `show_labels` covers the controller glyphs only — the port label and the status
 text keep their own settings.
 
+### Legibility over a bright scene
+
+Every stroke and letter is drawn over a **black keyline** — the overlay is
+readable on a green field or a bright game capture, where a thin grey outline
+would otherwise disappear once OBS scales the source down. It costs nothing on
+a dark background, where it simply isn't visible, so it is on by default.
+`&keyline=0` turns it off.
+
+If the shapes still read as too airy, `&idlefill=1` fills every unpressed
+button with a dark tint of its own colour, so buttons show as filled chips
+rather than hollow rings. It is off by default, since it is a large change to
+the look:
+
+```
+http://localhost:8069?bg=transparent&gear=0&portlabel=0&status=0&labels=0&idlefill=1
+```
+
 ### Overlay Controls
 
-- **Settings gear** (bottom-left): Switch controller port, toggle background, show/hide the port label, status text and button letters, calibrate sticks
+- **Settings gear** (bottom-left): Switch controller port, toggle background, show/hide the port label, status text, button letters, keyline and idle fill, calibrate sticks
 - **Number keys 1-4**: Quick switch between controller ports
 - **C key**: Recalibrate stick centers
 
@@ -142,6 +161,8 @@ Display settings can be set three ways, each layering on the one before:
 | `show_port_label` | `portlabel` | boolean | `true` |
 | `show_status` | `status` | boolean | `true` |
 | `show_labels` | `labels` | boolean | `true` |
+| `show_keyline` | `keyline` | boolean | `true` |
+| `show_idle_fill` | `idlefill` | boolean | `false` |
 
 Booleans accept `1/0`, `true/false`, `yes/no`, `on/off`. The canonical key works
 as a query param too, so `?gear=0` and `?show_gear=0` are equivalent. Unknown or
@@ -158,7 +179,8 @@ external controller (e.g. PRSH) can drive the overlay. Ports are 1-indexed.
 curl http://localhost:8069/api/settings
 # {"settings": {"port": 1, "background": "dark", "show_gear": true,
 #               "show_port_label": true, "show_status": true,
-#               "show_labels": true}, "clients": 1}
+#               "show_labels": true, "show_keyline": true,
+#               "show_idle_fill": false}, "clients": 1}
 ```
 
 **`POST /api/settings`** — apply a *partial* patch. Only the keys you send

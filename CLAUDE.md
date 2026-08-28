@@ -83,6 +83,7 @@ python main.py --game mario_superstar_baseball  # Game profile
 
 # Display defaults (per-source overrides go in the URL, see below)
 python main.py --bg transparent --no-gear --no-port-label --no-status
+python main.py --no-keyline --idle-fill  # legibility knobs, see Overlay Design Notes
 ```
 
 On the memorywatcher transport, start the overlay before launching Dolphin —
@@ -105,6 +106,8 @@ Ports are 1-indexed everywhere except `adapter.get_state()`, which is 0-indexed.
 | `show_port_label` | `portlabel` | boolean |
 | `show_status` | `status` | boolean |
 | `show_labels` | `labels` | boolean |
+| `show_keyline` | `keyline` | boolean |
+| `show_idle_fill` | `idlefill` | boolean |
 
 Endpoints (CORS-open on `/api`, server binds `127.0.0.1` only):
 
@@ -380,7 +383,7 @@ scales with everything else.
 ### Layout (pixel coordinates in 512x180 SVG space)
 The D-pad sits in the diagonal wedge below and between the two stick gates
 rather than below the main stick, which is what lets the whole overlay fit in
-180px instead of 256px. Both gates share a centerline at y=96; the wedge exists
+180px instead of 256px. Both gates share a centerline at y=100; the wedge exists
 because the octagons taper as they descend, so the horizontal gap between them
 widens below the centerline.
 
@@ -393,11 +396,11 @@ widens below the centerline.
 | Main Stick Head | center (84, 100) | circle, r=29, travel 23 |
 | C-Stick Gate | center (240, 100) | octagon, circumradius 38 |
 | C-Stick Head | center (240, 100) | circle, r=20, travel 16 |
-| D-Pad | center (170, 138) | plus, 20px arms, 62x62 overall |
-| A Button | center (398, 122) | circle, r=36 |
+| D-Pad | center (170, 138) | plus, 18px arms, 56x56 overall |
+| A Button | center (398, 126) | circle, r=34 |
 | B Button | center (334, 148) | circle, r=21 |
-| X Button | bean right of A | centreline r 60, half-thickness 16, -30° to 10° |
-| Y Button | bean above A | centreline r 60, half-thickness 16, -128° to -88° |
+| X Button | bean right of A | centreline r 62, half-thickness 16, -30° to 10° |
+| Y Button | bean above A | centreline r 62, half-thickness 16, -128° to -88° |
 | Start | center (302, 112) | circle, r=14 |
 | Port label | (502, 172) | text-anchor end |
 
@@ -414,28 +417,34 @@ With Z out of the way, **the Y bean under the top row is what pins A's y.** Y's
 topmost point is at angle -90°, which its span includes, so:
 
 ```
-Y top    = A.y - arc_radius - stroke/2
-arc_radius = A.r + 2 (A's half-stroke) + 5 (gap) + stroke/2
-
-=> Y top = A.y - A.r - 7 - stroke
+Y visual top = A.y - R - h - 2      (2 = the bean's half-stroke)
+R            = A.r + 4 + gap + h    (4 = A's half-stroke + the bean's)
+=> Y visual top = A.y - A.r - 2h - gap - 6
 ```
 
-Y must clear the trigger row's visual bottom of 37.75 by ~6, so:
+**Every clearance here is measured halo edge to halo edge**, since the keyline
+adds `--halo-w / 2` = 2px to every outline (see the keyline section). The
+trigger row's visual bottom is 37.75, so its halo reaches 39.75; Y's halo top
+is `Y visual top - 2`. Requiring ~4px of visible background between them:
 
 ```
-Y visual top = A.y - R - h - 2  =  A.y - A.r - 2h - gap - 6
-A.y >= A.r + 2h + gap + 49.75
+A.y - A.r - 2h - gap - 6 - 2  >=  39.75 + 4
+A.y >= A.r + 2h + gap + 51.75
 ```
 
-At A.r=36, h=16, gap=4 that floor is 121.75; A sits at 122, i.e. 0.25 of slack
-(the measured R-to-Y clearance is 6.25 against a 6 baseline). **Every increase
-to A's radius or the bean thickness raises that floor by one or two px
-respectively**, and A cannot absorb it by moving down — B's visual bottom is
-already 171 of 180. Note the top row spans the full width, so no amount of
-shuffling L/R/Z lifts this limit; only a shorter Y span that excludes -90°
-would.
+At A.r=34, h=16, gap=8 that floor is 125.75; A sits at 126, and the measured
+R-to-Y clearance is 4.25. **Every increase to A's radius, the bean thickness,
+or the A-to-bean gap raises that floor by one, two, or one px respectively.**
+A cannot absorb it by moving down much either — B's halo bottom is already 173
+of 180. Note the top row spans the full width, so no amount of shuffling L/R/Z
+lifts this limit; only a shorter Y span that excludes -90° would.
 
-There is now ~37px of slack between Z's bottom and the X bean's top cap, since
+That trade is why widening the A-to-bean gap from 4 to 8 (the halos were
+merging, so A/X/Y read as one mass) came with A shrinking 36 -> 34 and dropping
+122 -> 126: the gap has to be paid for out of A's radius, or Y walks into the R
+trigger.
+
+There is now ~35px of slack between Z's bottom and the X bean's top cap, since
 X no longer has anything above it. Rotating X's span upward (e.g. -45°..-5°)
 would fill it, at the cost of X no longer straddling A's centerline.
 
@@ -472,17 +481,27 @@ at full deflection, and it alone decides containment. It is set to the midpoint
 between the gate's notches (`circumradius`) and its flats
 (`apothem = circumradius x cos(22.5°)`):
 
-| | circumradius | apothem | head + travel |
-|---|---|---|---|
-| Main | 54 | 49.9 | **52** (r 29 + 23) |
-| C-stick | 38 | 35.1 | **36** (r 20 + 16) |
+| | circumradius | apothem | head + travel | + ring |
+|---|---|---|---|---|
+| Main | 54 | 49.9 | **52** (r 29 + 23) | 54 |
+| C-stick | 38 | 35.1 | **36** (r 20 + 16) | 38 |
 
 So **making the head bigger costs travel one-for-one** — trade within the sum
 and containment is untouched; raise the sum and the head starts breaking the
 gate line. Head diameter is ~54% of gate width at these values, matching the
 proportion PRSH ships.
 
-At the flats (22.5° off a cardinal) the head's edge sits ~1.4px past the gate
+The last column adds the head's 2px half-ring: with the keyline on, a fully
+deflected head's *visual* edge lands exactly on the gate's notch vertex. That
+is fine — and reads as intended — because **the head's ring is drawn on top of
+the gate**, not behind it. It is the one keyline the halo layer does not draw:
+a head sits over its gate, so its ring has to sit over the gate line too, and
+from the halo layer the gate's own stroke cuts across it. The heads come after
+the gates in document order, so `.stick-head` paints its own black ring
+(4px, or the original #444444 / #8A7009 at 2.5px when the keyline is off, via
+`--head-ring*`).
+
+At the flats (22.5° off a cardinal) the head's edge sits ~2.2px past the gate
 stroke, but only for magnitude-1.0 input. A real gate limits magnitude to
 `cos(22.5°) = 0.924` there, which pulls the head back inside; the poke is only
 visible in `--demo`, whose stick traces a true circle.
@@ -494,11 +513,18 @@ over four fill-only `.dpad-arm` polygons. Each arm polygon is the whole arm
 at the centre:
 
 ```
-up:    160,107  180,107  180,128  170,138  160,128
-down:  160,169  180,169  180,148  170,138  160,148
-left:  139,128  139,148  160,148  170,138  160,128
-right: 201,128  201,148  180,148  170,138  180,128
+up:    161,110  179,110  179,129  170,138  161,129
+down:  161,166  179,166  179,147  170,138  161,147
+left:  142,129  142,147  161,147  170,138  161,129
+right: 198,129  198,147  179,147  170,138  179,129
 ```
+
+Everything derives from the centre (170,138), the arm half-width (9) and the
+half-extent (28): a shoulder sits at `centre ± half-width`, an arm end at
+`centre ± half-extent`. The plus was 62x62 with 20px arms until the keyline
+landed; with 2px of halo on both the D-pad and each gate, the ~7.7px gaps to
+the gates dropped to ~3.7 and read as touching, so it came down to 56x56 with
+18px arms (now 6.8 halo-to-halo).
 
 The four points meet exactly at the centre (170,138) and tile the centre square,
 so a diagonal press joins into one clean L with a diagonal seam and no dark hole.
@@ -522,8 +548,8 @@ A   R-h R-h 0 0 0  inner(θ1)           inner arc runs backwards => sweep 0
 A   h   h   0 0 1  outer(θ1)  Z
 ```
 
-- **X** (-30°..10°): `M 463.82 84.0 A 76 76 0 0 1 472.85 135.2 A 16 16 0 0 1 441.33 129.64 A 44 44 0 0 0 436.11 100.0 A 16 16 0 0 1 463.82 84.0 Z`
-- **Y** (-128°..-88°): `M 351.21 62.11 A 76 76 0 0 1 400.65 46.05 A 16 16 0 0 1 399.54 78.03 A 44 44 0 0 0 370.91 87.33 A 16 16 0 0 1 351.21 62.11 Z`
+- **X** (-30°..10°): `M 465.55 87.0 A 78 78 0 0 1 474.82 139.54 A 16 16 0 0 1 443.3 133.99 A 46 46 0 0 0 437.84 103.0 A 16 16 0 0 1 465.55 87.0 Z`
+- **Y** (-128°..-88°): `M 349.98 64.54 A 78 78 0 0 1 400.72 48.05 A 16 16 0 0 1 399.61 80.03 A 46 46 0 0 0 369.68 89.75 A 16 16 0 0 1 349.98 64.54 Z`
 
 Labels still sit at the centreline midpoint angle (radius `R`, not `R±h`).
 
@@ -534,11 +560,117 @@ extending the span. `R` is derived, not free:
 R = A.r + 4 + gap + h      (4 = A's half-stroke + the bean's half-stroke)
 ```
 
-so `h` and `R` move together. At A.r=36, gap=4, h=16 that gives R=60.
+so `h` and `R` move together. At A.r=34, gap=8, h=16 that gives R=62.
+
+`gap` is 8 rather than 4 because the keyline spends 2px of it on each side: at
+gap=4 the A and X halos met and the pair read as a single dark mass. 8 leaves
+4px of visible background. Raising `gap` costs A radius one-for-one — see the
+Y-pins-A.y derivation in the Layout section.
 
 Endpoints are `(cx + r x cos θ, cy + r x sin θ)`. Both spans are under 180°, so
 large-arc-flag is 0; both run clockwise in SVG's y-down space, so sweep-flag
 is 1.
+
+### Keyline (the halo layer)
+A grey outline over a bright capture — a green field, a light game scene — has
+almost no luminance separation and disappears once OBS scales the source down.
+So **every stroke is drawn twice**: once by a `<use class="halo">` that sits
+*before* `#controller-group` and renders the whole controller in black a few px
+wider, and once by the real element on top.
+
+```html
+<use class="halo" href="#controller-group"/>
+<g id="controller-group"> ... </g>
+```
+```css
+.halo { --halo-c: #000000; --halo-w: 4px; }
+.gate { stroke: var(--halo-c, #C8C8C8); stroke-width: calc(4px + var(--halo-w, 0px)); }
+```
+
+The mechanism is **inherited custom properties**: `--halo-c` / `--halo-w` are
+set on the `<use>` element and inherit into its shadow tree, so the clones
+resolve the same rules to black-and-wider while the real elements fall back to
+their own colour and `+ 0px`. Real geometry is therefore untouched — a
+`getComputedStyle` on any real shape still reports its documented stroke width,
+and every clearance in the layout table above still holds.
+
+Because the halo layer is entirely *behind* the controller, **halos may overlap
+each other freely** — no halo can ever cover a real shape. The A/X gap (4px) is
+narrower than the two 2px halos, so it reads as solid black; that is fine, both
+sides are the same colour. What matters is that a halo never eats a neighbour's
+outline.
+
+Nothing else has to be kept in sync: pressed state, the trigger fill widths and
+`#controller-group.hidden` all reach the clones on their own.
+
+**The trap:** document CSS does not match *across* the `<use>` shadow boundary.
+Rules that live entirely inside the tree (`.gate`, `.grp-a .shape`,
+`.grp-a.pressed .shape`, `.hidden`) match the clones fine. A rule rooted at an
+ancestor outside it does not — `#controller-svg.no-labels .btn-label` hid the
+real letters and left the halo's letters drawing on their own. Anything that
+has to cross the boundary must travel as an inherited property instead, which
+is why `show_labels` works through `--label-display`:
+
+```css
+#controller-svg.no-labels { --label-display: none; }
+.btn-label { display: var(--label-display, inline); }
+```
+
+`show_keyline` turns the layer off (`?keyline=0`). That one *can* be a plain
+selector — `#controller-svg.no-keyline .halo { display: none }` — because
+`.halo` is a light-DOM child; dropping the `<use>` takes every clone with it.
+Only the glyph keylines, which the real elements draw themselves, have to be
+cleared separately.
+
+Glyphs get their keyline directly instead, via `stroke: #000000` +
+`paint-order: stroke` (which puts the stroke behind the fill, so the letter
+keeps its weight and the ring only grows outward). That also covers the status
+text, which sits outside the halo group.
+
+Two glyph exceptions:
+
+- **`ST`** — at font-size 11 inside an r=14 circle a full 2.5px keyline
+  swallows the button, so it gets 1.5px.
+- **Held buttons** — `.pressed .label { stroke: none }`. A pressed label is a
+  very dark tint of its own hue on an opaque bright fill; it already has all
+  the contrast it needs, and a black ring around a dark glyph only thickens it
+  into an unreadable blob. That selector sits entirely inside the shadow tree,
+  so it clears the clone's stroke too — otherwise the wider clone would keep
+  ringing the letter from behind. The **trigger glyphs are deliberately not
+  covered**: the bar fill is analog, so `L`/`R` can sit half on white and half
+  on the background, and the keyline is what carries them across both.
+
+### Idle Fill
+`show_idle_fill` (`?idlefill=1`, off by default) puts a dark plate inside every
+unpressed shape, so a button reads as a filled chip rather than a hollow ring.
+It is the second half of the legibility story: the keyline separates the
+overlay from the scene behind it, the idle fill gives each button a body.
+
+The tints are dark versions of each button's own hue rather than one flat grey,
+so a button keeps its identity with the letters off:
+
+| | idle fill |
+|---|---|
+| A | `#0D2B22` |
+| B | `#2E1414` |
+| Z | `#241436` |
+| C-stick gate | `#2B2209` |
+| everything else (X, Y, Start, D-pad, main gate, triggers) | `#1E1E24` |
+
+Same inherited-custom-property trick as `--label-display`, for the same
+shadow-boundary reason: `#controller-svg.idle-fill` sets `--idle-*`, and every
+shape reads `fill: var(--idle-x, none)`.
+
+Two placement rules the markup depends on:
+
+- **`.dpad-outline` must keep `fill: none`.** It is drawn *over* the arms, so a
+  fill there would hide a held direction. The D-pad's plate comes from the four
+  `.dpad-arm` polygons instead, which tile the whole plus.
+- **`.trigger-outline` takes the fill**, and the white `.trigger-fill` bar
+  drawn after it stays on top.
+
+Off by default because it is a large visual change and the hollow look is what
+PRSH already ships.
 
 ### Stroke Weights
 Strokes are deliberately heavy so the overlay stays legible when scaled down
@@ -556,7 +688,24 @@ earlier build drew a 7px sliver at the inner end for the digital bit.)
 curved bean reports overlap where the shapes are comfortably apart (the A/X and
 D-pad/gate pairs both read as -3 by bbox while actually holding 5px and 7.7px).
 Measure real geometry instead — sample both outlines with `getPointAtLength()`,
-take the minimum pairwise distance, and subtract each element's half stroke.
+take the minimum pairwise distance, and subtract each element's half stroke
+**plus its halo** (`--halo-w / 2` = 2px, except the stick heads, whose ring is
+already in their own stroke width). That gives the background actually visible
+between two shapes, which is the number that matters now:
+
+| Pair | halo-to-halo |
+|---|---|
+| A - X | 4.00 |
+| A - Y | 4.00 |
+| Y - R trigger | 4.25 |
+| A - B | 4.68 |
+| Start - C gate | 5.01 |
+| B - Start | 5.42 |
+| D-pad - C gate | 6.76 |
+| D-pad - main gate | 6.81 |
+| X - Z | 35.17 |
+
+Rightmost extent 489 of 512 (Z's pill, not X); lowest 173 of 180 (B).
 
 ### No Alpha
 **Every shape is fully opaque.** No `opacity`, `fill-opacity`, `stroke-opacity`,
@@ -564,28 +713,36 @@ take the minimum pairwise distance, and subtract each element's half stroke.
 composites against whatever is behind the browser source in OBS and shifts
 colour per scene. `fill: none` / `stroke: none` are fine: those paint nothing
 rather than painting something translucent. The only intentional transparency
-is the page background under `background: transparent`.
+is the page background under `background: transparent`. The keyline is opaque
+black for the same reason a drop shadow would be wrong here.
 
 ### Color Scheme (all fully opaque)
 | Element | Unpressed | Pressed |
 |---------|-----------|---------|
 | A | stroke #00E196 | fill #00E196 |
 | B | stroke #E63E3E | fill #E63E3E |
-| X bean | stroke #AAAAAA | fill #FFFFFF |
-| Y bean | stroke #AAAAAA | fill #FFFFFF |
+| X bean | stroke #C8C8C8 | fill #FFFFFF |
+| Y bean | stroke #C8C8C8 | fill #FFFFFF |
 | Z | stroke #B36CD6 | fill #B36CD6 |
-| Start | stroke #AAAAAA | fill #FFFFFF |
-| D-pad | stroke #AAAAAA | arm fill #FFFFFF |
-| Main gate | stroke #AAAAAA | — |
-| C-stick gate | stroke #B8960F | — |
+| Start | stroke #C8C8C8 | fill #FFFFFF |
+| D-pad | stroke #C8C8C8 | arm fill #FFFFFF |
+| Main gate | stroke #C8C8C8 | — |
+| C-stick gate | stroke #D4A017 | — |
 | Main stick | fill #FFFFFF | — |
 | C-stick | fill #FFD43B | — |
 | Triggers | fill #FFFFFF | — |
+| Keyline (behind all of the above) | stroke #000000 | stroke #000000 |
 
 Pressed labels use a very dark tint of their own hue rather than the page
-background, so they stay readable on a transparent background.
+background, so they stay readable on a transparent background — and they drop
+the keyline while held, for the reason in the keyline note above.
+
+The greys were #AAAAAA before the keyline landed; they were lifted to #C8C8C8
+(and the C-gate from #B8960F to #D4A017) at the same time, since a dark gold on
+a mid-green field was the single worst offender.
 
 All glyphs (A/B/X/Y/Z/ST/L/R) carry `.btn-label`, `.arc-label` or
 `.trigger-label`, and the `show_labels` setting hides them by toggling
-`.no-labels` on the SVG root. The port label and the status text are
+`.no-labels` on the SVG root, which flips `--label-display` (see the keyline
+note above for why it cannot be a descendant selector). The port label and the status text are
 deliberately not covered — they have their own settings.
