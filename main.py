@@ -29,7 +29,8 @@ import time
 from aiohttp import web
 
 from _version import __version__
-from dolphin_adapter import DolphinAdapter, load_game_profile, save_game_profile
+from dolphin_common import load_game_profile, save_game_profile
+from memorywatcher_adapter import MemoryWatcherAdapter
 from resources import resource_path
 from server import create_app
 
@@ -174,7 +175,7 @@ def main():
             print(f"Error: Game profile not found: {profile_path}")
             print(f"Available profiles in {PROFILES_DIR}/")
             sys.exit(1)
-        adapter = DolphinAdapter(profile_path, dolphin_dir=args.dolphin_dir)
+        adapter = MemoryWatcherAdapter(profile_path, dolphin_dir=args.dolphin_dir)
 
     adapter.start()
     app = create_app(adapter, port=args.controller - 1)
