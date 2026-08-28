@@ -2,14 +2,14 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=512, height=256">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>GC Overlay</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
+html, body { width: 100%; height: 100%; }
+
 body {
-  width: 512px;
-  height: 256px;
   overflow: hidden;
   background: #1a1a2e;
   font-family: -apple-system, 'Helvetica Neue', sans-serif;
@@ -18,42 +18,29 @@ body {
 }
 body.transparent-bg { background: transparent; }
 
-#overlay { position: relative; width: 512px; height: 256px; }
-#controller-svg { display: block; }
-#controller-svg.hidden { display: none; }
+/* The SVG scales to whatever size OBS gives the browser source, so the
+   recommended 512x180 is a ratio rather than a fixed size. */
+#overlay { position: relative; width: 100%; height: 100%; }
+#controller-svg { display: block; width: 100%; height: 100%; }
 
-/* ── Status ── */
-#status {
-  position: absolute;
-  top: 50%; left: 50%;
-  transform: translate(-50%, -50%);
-  color: #AAAAAA;
-  font-size: 14px;
-  text-align: center;
-  line-height: 1.6;
-  z-index: 100;
-  pointer-events: none;
-}
-#status.hidden { display: none; }
-#status .sub { font-size: 12px; margin-top: 6px; color: #777777; }
+.hidden { display: none; }
 
 /* ── SVG Styles ── */
 
 /* Gates */
-.gate { fill: none; stroke: #AAAAAA; stroke-width: 3; }
-.gate-c { fill: none; stroke: #B8960F; stroke-width: 3; }
+.gate { fill: none; stroke: #AAAAAA; stroke-width: 4; stroke-linejoin: round; }
+.gate-c { fill: none; stroke: #B8960F; stroke-width: 4; stroke-linejoin: round; }
 
 /* Stick heads */
-.stick-head { fill: #FFFFFF; stroke: #444444; stroke-width: 2; }
-.stick-head-c { fill: #FFD43B; stroke: #B8960F; stroke-width: 2; }
+.stick-head { fill: #FFFFFF; stroke: #444444; stroke-width: 2.5; }
+.stick-head-c { fill: #FFD43B; stroke: #8A7009; stroke-width: 2.5; }
 
 /* Triggers */
-.trigger-outline { fill: none; stroke: #AAAAAA; stroke-width: 2.5; }
+.trigger-outline { fill: none; stroke: #AAAAAA; stroke-width: 3.5; }
 .trigger-fill { fill: #FFFFFF; }
-.trigger-digital { fill: #FFFFFF; }
 .trigger-label {
-  fill: #666666;
-  font-size: 11px;
+  fill: #777777;
+  font-size: 16px;
   font-weight: 700;
   font-family: -apple-system, sans-serif;
   text-anchor: middle;
@@ -61,45 +48,47 @@ body.transparent-bg { background: transparent; }
 }
 
 /* Buttons — A */
-.grp-a .shape { fill: none; stroke: #00E196; stroke-width: 3; }
+.grp-a .shape { fill: none; stroke: #00E196; stroke-width: 4; }
 .grp-a.pressed .shape { fill: #00E196; }
 .grp-a .label { fill: #00E196; }
-.grp-a.pressed .label { fill: #1a1a2e; }
+.grp-a.pressed .label { fill: #10241d; }
 
 /* Buttons — B */
-.grp-b .shape { fill: none; stroke: #E63E3E; stroke-width: 3; }
+.grp-b .shape { fill: none; stroke: #E63E3E; stroke-width: 4; }
 .grp-b.pressed .shape { fill: #E63E3E; }
 .grp-b .label { fill: #E63E3E; }
-.grp-b.pressed .label { fill: #1a1a2e; }
+.grp-b.pressed .label { fill: #2a1010; }
 
-/* Buttons — X arc */
-.grp-x .shape { fill: none; stroke: #999999; stroke-width: 20; stroke-linecap: round; }
-.grp-x.pressed .shape { stroke: #FFFFFF; }
-.grp-x .label { fill: #999999; }
-.grp-x.pressed .label { fill: #FFFFFF; }
-
-/* Buttons — Y arc */
-.grp-y .shape { fill: none; stroke: #999999; stroke-width: 20; stroke-linecap: round; }
-.grp-y.pressed .shape { stroke: #FFFFFF; }
-.grp-y .label { fill: #999999; }
-.grp-y.pressed .label { fill: #FFFFFF; }
+/* Buttons — X / Y beans */
+.grp-x .shape, .grp-y .shape {
+  fill: none; stroke: #AAAAAA; stroke-width: 4; stroke-linejoin: round;
+}
+.grp-x.pressed .shape, .grp-y.pressed .shape { fill: #FFFFFF; stroke: #FFFFFF; }
+.grp-x .label, .grp-y .label { fill: #AAAAAA; }
+.grp-x.pressed .label, .grp-y.pressed .label { fill: #202020; }
 
 /* Buttons — Z */
-.grp-z .shape { fill: none; stroke: #B36CD6; stroke-width: 3; }
+.grp-z .shape { fill: none; stroke: #B36CD6; stroke-width: 4; }
 .grp-z.pressed .shape { fill: #B36CD6; }
 .grp-z .label { fill: #B36CD6; }
-.grp-z.pressed .label { fill: #1a1a2e; }
+.grp-z.pressed .label { fill: #201029; }
 
 /* Buttons — Start */
-.grp-start .shape { fill: none; stroke: #AAAAAA; stroke-width: 2.5; }
+.grp-start .shape { fill: none; stroke: #AAAAAA; stroke-width: 3.5; }
 .grp-start.pressed .shape { fill: #FFFFFF; stroke: #FFFFFF; }
 .grp-start .label { fill: #AAAAAA; }
 .grp-start.pressed .label { fill: #1a1a2e; }
 
-/* D-pad */
-.dpad-arm { fill: none; stroke: #AAAAAA; stroke-width: 2.5; }
-.dpad-arm.pressed { fill: #FFFFFF; stroke: #FFFFFF; }
-.dpad-center { fill: none; stroke: #AAAAAA; stroke-width: 2.5; }
+/* D-pad — arms fill on press, a single plus outline sits on top so the
+   cross reads as one shape instead of five stroked boxes. */
+.dpad-arm { fill: none; stroke: none; }
+.dpad-arm.pressed { fill: #FFFFFF; }
+.dpad-outline {
+  fill: none;
+  stroke: #AAAAAA;
+  stroke-width: 4;
+  stroke-linejoin: round;
+}
 
 /* Button labels */
 .btn-label {
@@ -108,11 +97,19 @@ body.transparent-bg { background: transparent; }
   text-anchor: middle;
   dominant-baseline: central;
   pointer-events: none;
-  paint-order: stroke;
-  stroke: #000000;
-  stroke-width: 3px;
-  stroke-linejoin: round;
 }
+.arc-label {
+  font-family: -apple-system, sans-serif;
+  font-weight: 700;
+  text-anchor: middle;
+  dominant-baseline: central;
+  pointer-events: none;
+}
+
+/* Letters off — see the show_labels setting */
+#controller-svg.no-labels .btn-label,
+#controller-svg.no-labels .arc-label,
+#controller-svg.no-labels .trigger-label { display: none; }
 
 /* Port indicator */
 .port-label {
@@ -123,11 +120,25 @@ body.transparent-bg { background: transparent; }
   text-anchor: end;
 }
 
+/* Status text (inside the SVG so it scales with everything else) */
+.status-main {
+  fill: #AAAAAA;
+  font-size: 14px;
+  font-family: -apple-system, sans-serif;
+  text-anchor: middle;
+}
+.status-sub {
+  fill: #777777;
+  font-size: 11px;
+  font-family: -apple-system, sans-serif;
+  text-anchor: middle;
+}
+
 /* ── Settings Panel ── */
 #settings-toggle {
   position: absolute;
-  bottom: 8px;
-  left: 8px;
+  bottom: 6px;
+  left: 6px;
   width: 22px;
   height: 22px;
   border: none;
@@ -137,10 +148,11 @@ body.transparent-bg { background: transparent; }
   cursor: pointer;
   z-index: 200;
   border-radius: 4px;
-  display: flex;
+  display: none;
   align-items: center;
   justify-content: center;
 }
+#settings-toggle.visible { display: flex; }
 #settings-toggle:hover { color: #AAAAAA; }
 
 #settings {
@@ -150,16 +162,17 @@ body.transparent-bg { background: transparent; }
   width: 100%; height: 100%;
   background: #13132a;
   z-index: 150;
-  padding: 20px;
+  padding: 14px 18px;
   color: #CCCCCC;
   font-size: 13px;
+  overflow: auto;
 }
-#settings.visible { display: flex; flex-direction: column; gap: 12px; }
-#settings h3 { font-size: 15px; font-weight: 600; color: #FFFFFF; margin-bottom: 4px; }
+#settings.visible { display: flex; flex-direction: column; gap: 9px; }
+#settings h3 { font-size: 15px; font-weight: 600; color: #FFFFFF; margin-bottom: 2px; }
 .setting-row { display: flex; align-items: center; gap: 10px; }
-.setting-row label { min-width: 80px; }
+.setting-row label { min-width: 84px; }
 .setting-row select, .setting-row button {
-  padding: 4px 10px;
+  padding: 3px 10px;
   border: 1px solid #444444;
   border-radius: 4px;
   background: #222244;
@@ -168,100 +181,124 @@ body.transparent-bg { background: transparent; }
   cursor: pointer;
 }
 .setting-row button:hover { background: #333366; }
+.setting-row input[type=checkbox] { cursor: pointer; }
+.settings-foot { margin-top: auto; color: #555555; font-size: 11px; }
 </style>
 </head>
 <body>
 
 <div id="overlay">
 
-  <div id="status">
-    <div>Waiting for controller data...</div>
-    <div class="sub">Start the overlay before launching Dolphin</div>
-  </div>
-
-  <svg id="controller-svg" class="hidden" viewBox="0 0 512 256" width="512" height="256" xmlns="http://www.w3.org/2000/svg">
+  <svg id="controller-svg" viewBox="0 0 512 180" preserveAspectRatio="xMidYMid meet"
+       xmlns="http://www.w3.org/2000/svg">
     <defs>
-      <clipPath id="clip-tl"><rect x="31" y="15" width="123" height="20" rx="3"/></clipPath>
-      <clipPath id="clip-tr"><rect x="358" y="15" width="123" height="20" rx="3"/></clipPath>
+      <clipPath id="clip-tl"><rect x="30" y="9" width="124" height="24" rx="3"/></clipPath>
+      <clipPath id="clip-tr"><rect x="290" y="9" width="124" height="24" rx="3"/></clipPath>
     </defs>
 
-    <!-- ── L Trigger ── -->
-    <rect class="trigger-outline" x="30" y="14" width="125" height="22" rx="4"/>
-    <rect class="trigger-fill" id="tl-fill" clip-path="url(#clip-tl)" x="31" y="15" width="0" height="20"/>
-    <rect class="trigger-digital" id="tl-digital" x="148" y="15" width="6" height="20" style="display:none"/>
-    <text class="trigger-label" x="92" y="25">L</text>
-
-    <!-- ── R Trigger ── -->
-    <rect class="trigger-outline" x="357" y="14" width="125" height="22" rx="4"/>
-    <rect class="trigger-fill" id="tr-fill" clip-path="url(#clip-tr)" x="481" y="15" width="0" height="20"/>
-    <rect class="trigger-digital" id="tr-digital" x="358" y="15" width="6" height="20" style="display:none"/>
-    <text class="trigger-label" x="419" y="25">R</text>
-
-    <!-- ── Main Stick ── -->
-    <!-- Regular octagon: center (95,122), radius 55, flat-top orientation -->
-    <polygon
-      class="gate"
-      points="116,71 146,101 146,143 116,173 74,173 44,143 44,101 74,71"
-      transform="rotate(22.5 95 122)"
-    />
-    <circle class="stick-head" id="main-stick" cx="95" cy="122" r="30"/>
-
-    <!-- ── C-Stick ── -->
-    <!-- Regular octagon: center (235,122), radius 40, flat-top orientation -->
-    <polygon
-      class="gate-c"
-      points="250,85 272,107 272,137 250,159 220,159 198,137 198,107 220,85"
-      transform="rotate(22.5 235 122)"
-    />
-    <circle class="stick-head-c" id="c-stick" cx="235" cy="122" r="20"/>
-
-    <!-- ── D-Pad ── centered at (95, 218) -->
-    <rect class="dpad-center" x="87" y="210" width="16" height="16" rx="1"/>
-    <rect class="dpad-arm" id="dpad-up"    x="87" y="190" width="16" height="20" rx="2"/>
-    <rect class="dpad-arm" id="dpad-down"  x="87" y="226" width="16" height="20" rx="2"/>
-    <rect class="dpad-arm" id="dpad-left"  x="67" y="210" width="20" height="16" rx="2"/>
-    <rect class="dpad-arm" id="dpad-right" x="103" y="210" width="20" height="16" rx="2"/>
-
-    <!-- ── Y Button (arc above A) ── -->
-    <!-- Arc centered on A(390,118), radius 45, from 85deg to 120deg (35deg span) -->
-    <g class="grp-y" id="grp-y">
-      <path class="shape" d="M 367.5 79.0 A 45 45 0 0 1 393.9 73.2"/>
-      <text class="btn-label label" x="380" y="74" font-size="12">Y</text>
+    <!-- ── Status ── -->
+    <g id="status-group">
+      <text class="status-main" id="status-main" x="256" y="82">Waiting for controller data...</text>
+      <text class="status-sub" id="status-sub" x="256" y="104">Start the overlay before launching Dolphin</text>
     </g>
 
-    <!-- ── X Button (arc right of A) ── -->
-    <!-- Arc centered on A(390,118), radius 45, from 0deg to 35deg (35deg span) -->
-    <g class="grp-x" id="grp-x">
-      <path class="shape" d="M 426.9 92.2 A 45 45 0 0 1 435.0 118.0"/>
-      <text class="btn-label label" x="432.5" y="103" font-size="12">X</text>
-    </g>
+    <!-- ── Controller ── -->
+    <g id="controller-group" class="hidden">
 
-    <!-- ── A Button ── -->
-    <g class="grp-a" id="grp-a">
-      <circle class="shape" cx="390" cy="118" r="26"/>
-      <text class="btn-label label" x="390" y="118" font-size="17">A</text>
-    </g>
+      <!-- L Trigger -->
+      <rect class="trigger-outline" x="27" y="6" width="130" height="30" rx="6"/>
+      <rect class="trigger-fill" id="tl-fill" clip-path="url(#clip-tl)" x="30" y="9" width="0" height="24"/>
+      <text class="trigger-label" x="92" y="21">L</text>
 
-    <!-- ── B Button ── -->
-    <g class="grp-b" id="grp-b">
-      <circle class="shape" cx="338" cy="162" r="15"/>
-      <text class="btn-label label" x="338" y="162" font-size="12">B</text>
-    </g>
+      <!-- R Trigger — bumped left so Z can take the top-right corner -->
+      <rect class="trigger-outline" x="287" y="6" width="130" height="30" rx="6"/>
+      <rect class="trigger-fill" id="tr-fill" clip-path="url(#clip-tr)" x="414" y="9" width="0" height="24"/>
+      <text class="trigger-label" x="352" y="21">R</text>
 
-    <!-- ── Z Button ── -->
-    <g class="grp-z" id="grp-z">
-      <rect class="shape" x="426" y="46" width="50" height="26" rx="13"/>
-      <text class="btn-label label" x="451" y="59" font-size="12">Z</text>
-    </g>
+      <!-- Main Stick — regular octagon, center (84,100), circumradius 54.
+           Vertices sit on the cardinals and diagonals, matching the notches
+           of a real GC gate. -->
+      <polygon class="gate"
+        points="138,100 122.2,138.2 84,154 45.8,138.2 30,100 45.8,61.8 84,46 122.2,61.8"/>
+      <circle class="stick-head" id="main-stick" cx="84" cy="100" r="29"/>
 
-    <!-- ── Start Button ── -->
-    <g class="grp-start" id="grp-start">
-      <circle class="shape" cx="308" cy="130" r="11"/>
-      <text class="btn-label label" x="308" y="130" font-size="9">ST</text>
-    </g>
+      <!-- C-Stick — regular octagon, center (240,100), circumradius 38, same
+           notch orientation as the main gate and on the same centerline. The
+           gates taper as they descend, so the wedge below and between them
+           still clears the D-pad. -->
+      <polygon class="gate-c"
+        points="278,100 266.9,126.9 240,138 213.1,126.9 202,100 213.1,73.1 240,62 266.9,73.1"/>
+      <circle class="stick-head-c" id="c-stick" cx="240" cy="100" r="20"/>
 
-    <!-- ── Port Indicator ── -->
-    <text class="port-label" id="port-label" x="496" y="244">P1</text>
+      <!-- D-Pad — center (170,138), 20px arms, tucked into the diagonal gap
+           below and between the two gates so it costs no extra height.
+           The grey outline is a plain square-cornered plus. Each arm's fill
+           is the whole arm plus a 45° point into the middle, so a held
+           direction reads as an arrow aimed at the centre; the four points
+           meet exactly at (170,138) and tile the centre square. -->
+      <polygon class="dpad-arm" id="dpad-up"
+        points="160,107 180,107 180,128 170,138 160,128"/>
+      <polygon class="dpad-arm" id="dpad-down"
+        points="160,169 180,169 180,148 170,138 160,148"/>
+      <polygon class="dpad-arm" id="dpad-left"
+        points="139,128 139,148 160,148 170,138 160,128"/>
+      <polygon class="dpad-arm" id="dpad-right"
+        points="201,128 201,148 180,148 170,138 180,128"/>
+      <path class="dpad-outline"
+        d="M 160 107 L 180 107 L 180 128 L 201 128 L 201 148 L 180 148
+           L 180 169 L 160 169 L 160 148 L 139 148 L 139 128 L 160 128 Z"/>
+
+      <!-- Y Button — bean above A, centered on A(398,122), centreline radius
+           60, half-thickness 16, spanning -128° to -88°. Outlined rather than
+           drawn as a thick stroke so it fills on press like A/B/Z/Start. -->
+      <g class="grp-y" id="grp-y">
+        <path class="shape" d="M 351.21 62.11
+          A 76 76 0 0 1 400.65 46.05
+          A 16 16 0 0 1 399.54 78.03
+          A 44 44 0 0 0 370.91 87.33
+          A 16 16 0 0 1 351.21 62.11 Z"/>
+        <text class="arc-label label" x="379.5" y="64.9" font-size="17">Y</text>
+      </g>
+
+      <!-- X Button — bean right of A, same construction as Y, spanning
+           -30° to 10° so it straddles A's centerline. -->
+      <g class="grp-x" id="grp-x">
+        <path class="shape" d="M 463.82 84.0
+          A 76 76 0 0 1 472.85 135.2
+          A 16 16 0 0 1 441.33 129.64
+          A 44 44 0 0 0 436.11 100.0
+          A 16 16 0 0 1 463.82 84.0 Z"/>
+        <text class="arc-label label" x="457.1" y="111.6" font-size="17">X</text>
+      </g>
+
+      <!-- A Button -->
+      <g class="grp-a" id="grp-a">
+        <circle class="shape" cx="398" cy="122" r="36"/>
+        <text class="btn-label label" x="398" y="122" font-size="25">A</text>
+      </g>
+
+      <!-- B Button -->
+      <g class="grp-b" id="grp-b">
+        <circle class="shape" cx="334" cy="148" r="21"/>
+        <text class="btn-label label" x="334" y="148" font-size="17">B</text>
+      </g>
+
+      <!-- Z Button — top-right corner, sharing the trigger row. Moving it
+           out of the A cluster is what frees X to grow upward. -->
+      <g class="grp-z" id="grp-z">
+        <rect class="shape" x="429" y="6" width="56" height="30" rx="15"/>
+        <text class="btn-label label" x="457" y="21" font-size="17">Z</text>
+      </g>
+
+      <!-- Start Button -->
+      <g class="grp-start" id="grp-start">
+        <circle class="shape" cx="302" cy="112" r="14"/>
+        <text class="btn-label label" x="302" y="112" font-size="11">ST</text>
+      </g>
+
+      <!-- Port Indicator -->
+      <text class="port-label" id="port-label" x="502" y="172">P1</text>
+    </g>
   </svg>
 
   <!-- Settings Toggle -->
@@ -273,10 +310,10 @@ body.transparent-bg { background: transparent; }
     <div class="setting-row">
       <label>Port:</label>
       <select id="port-select">
-        <option value="0">Port 1</option>
-        <option value="1">Port 2</option>
-        <option value="2">Port 3</option>
-        <option value="3">Port 4</option>
+        <option value="1">Port 1</option>
+        <option value="2">Port 2</option>
+        <option value="3">Port 3</option>
+        <option value="4">Port 4</option>
       </select>
     </div>
     <div class="setting-row">
@@ -287,12 +324,22 @@ body.transparent-bg { background: transparent; }
       </select>
     </div>
     <div class="setting-row">
+      <label>Port label:</label>
+      <input type="checkbox" id="port-label-check">
+    </div>
+    <div class="setting-row">
+      <label>Status text:</label>
+      <input type="checkbox" id="status-check">
+    </div>
+    <div class="setting-row">
+      <label>Letters:</label>
+      <input type="checkbox" id="labels-check">
+    </div>
+    <div class="setting-row">
       <label></label>
       <button id="calibrate-btn">Calibrate Sticks</button>
     </div>
-    <div class="setting-row" style="margin-top: auto; color: #555; font-size: 11px;">
-      GC Overlay
-    </div>
+    <div class="setting-row settings-foot">GC Overlay</div>
   </div>
 
 </div>
@@ -302,25 +349,36 @@ body.transparent-bg { background: transparent; }
   'use strict';
 
   const $ = id => document.getElementById(id);
-  const statusEl = $('status');
+
   const svgEl = $('controller-svg');
+  const statusGroup = $('status-group');
+  const statusMain = $('status-main');
+  const statusSub = $('status-sub');
+  const controllerGroup = $('controller-group');
   const settingsPanel = $('settings');
   const settingsToggle = $('settings-toggle');
   const portSelect = $('port-select');
   const bgSelect = $('bg-select');
+  const portLabelCheck = $('port-label-check');
+  const statusCheck = $('status-check');
+  const labelsCheck = $('labels-check');
   const calibrateBtn = $('calibrate-btn');
 
-  // Sticks
+  // Sticks — travel splits the difference between the gate's notches
+  // (circumradius) and its flats (apothem), so a full deflection reads as
+  // hitting the notch without the head breaking the gate line mid-edge.
   const mainStick = $('main-stick');
   const cStick = $('c-stick');
-  const MAIN_STICK_RANGE = 35;
-  const C_STICK_RANGE = 26;
+  const MAIN_STICK_CENTER = { x: 84, y: 100 };
+  const C_STICK_CENTER = { x: 240, y: 100 };
+  const MAIN_STICK_RANGE = 23;
+  const C_STICK_RANGE = 16;
 
   // Triggers
   const tlFill = $('tl-fill');
   const trFill = $('tr-fill');
-  const tlDigital = $('tl-digital');
-  const trDigital = $('tr-digital');
+  const TRIGGER_WIDTH = 124;
+  const TRIGGER_R_RIGHT = 414;
 
   // Button groups
   const grpA = $('grp-a');
@@ -339,46 +397,79 @@ body.transparent-bg { background: transparent; }
   // Port
   const portLabel = $('port-label');
 
-  // ── URL params ──
-  const params = new URLSearchParams(location.search);
-  if (params.get('bg') === 'transparent') {
-    document.body.classList.add('transparent-bg');
-    bgSelect.value = 'transparent';
-  }
+  // ── Settings ──
+  // The server owns settings: it merges its defaults with this page's query
+  // string and sends the result down the socket. The gear starts hidden so a
+  // gear-less source never flashes one before the first settings message.
+  const cfg = {
+    port: 1,
+    background: 'dark',
+    show_gear: false,
+    show_port_label: true,
+    show_status: true,
+    show_labels: true
+  };
 
-  // Initial port from URL param (0-indexed internally, 1-indexed in param)
-  let initialPort = 0;
-  const portParam = params.get('port');
-  if (portParam !== null) {
-    const p = parseInt(portParam);
-    if (p >= 1 && p <= 4) {
-      initialPort = p - 1;
-      portSelect.value = initialPort;
-      portLabel.textContent = 'P' + p;
+  // Apply the background from the URL immediately, so an OBS source started
+  // with ?bg=transparent never paints a dark frame before the socket opens.
+  const params = new URLSearchParams(location.search);
+  const bgParam = params.get('bg') || params.get('background');
+  if (bgParam === 'transparent') document.body.classList.add('transparent-bg');
+
+  let settingsOpen = false;
+
+  function applySettings(patch) {
+    Object.assign(cfg, patch);
+
+    document.body.classList.toggle('transparent-bg', cfg.background === 'transparent');
+    settingsToggle.classList.toggle('visible', !!cfg.show_gear);
+    portLabel.classList.toggle('hidden', !cfg.show_port_label);
+    svgEl.classList.toggle('no-labels', !cfg.show_labels);
+    portLabel.textContent = 'P' + cfg.port;
+
+    // Keep the panel controls in sync with whatever drove the change.
+    portSelect.value = String(cfg.port);
+    bgSelect.value = cfg.background;
+    portLabelCheck.checked = !!cfg.show_port_label;
+    statusCheck.checked = !!cfg.show_status;
+    labelsCheck.checked = !!cfg.show_labels;
+
+    if (!cfg.show_gear && settingsOpen) {
+      settingsOpen = false;
+      settingsPanel.classList.remove('visible');
     }
   }
 
-  // ── Settings ──
-  let settingsOpen = false;
+  // A local change: tell the server so it tracks this client, but it stays
+  // scoped to this browser source and does not move the server defaults.
+  function setLocal(patch) {
+    applySettings(patch);
+    sendMessage({ settings: patch });
+  }
 
   settingsToggle.addEventListener('click', () => {
     settingsOpen = !settingsOpen;
     settingsPanel.classList.toggle('visible', settingsOpen);
   });
 
-  // Hide port selector when port is set via URL param (controlled by PRSH/OBS)
-  const portLocked = portParam !== null;
-  if (portLocked) {
-    portSelect.closest('.setting-row').style.display = 'none';
-  }
-
   portSelect.addEventListener('change', () => {
-    sendMessage({ port: parseInt(portSelect.value) });
-    portLabel.textContent = 'P' + (parseInt(portSelect.value) + 1);
+    setLocal({ port: parseInt(portSelect.value, 10) });
   });
 
   bgSelect.addEventListener('change', () => {
-    document.body.classList.toggle('transparent-bg', bgSelect.value === 'transparent');
+    setLocal({ background: bgSelect.value });
+  });
+
+  portLabelCheck.addEventListener('change', () => {
+    setLocal({ show_port_label: portLabelCheck.checked });
+  });
+
+  statusCheck.addEventListener('change', () => {
+    setLocal({ show_status: statusCheck.checked });
+  });
+
+  labelsCheck.addEventListener('change', () => {
+    setLocal({ show_labels: labelsCheck.checked });
   });
 
   calibrateBtn.addEventListener('click', () => {
@@ -391,20 +482,24 @@ body.transparent-bg { background: transparent; }
 
   function connect() {
     const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const currentPort = parseInt(portSelect.value);
-    ws = new WebSocket(protocol + '//' + location.host + '/ws?port=' + currentPort);
+    // Forward this page's query string so the server can resolve the
+    // effective settings for this source in one place.
+    ws = new WebSocket(protocol + '//' + location.host + '/ws' + location.search);
 
     ws.onopen = () => {
       if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
     };
 
     ws.onmessage = (event) => {
-      try { updateOverlay(JSON.parse(event.data)); }
-      catch (e) { /* ignore */ }
+      let msg;
+      try { msg = JSON.parse(event.data); }
+      catch (e) { return; }
+      if (msg.type === 'settings') applySettings(msg.settings || {});
+      else updateOverlay(msg);
     };
 
     ws.onclose = () => { ws = null; reconnectTimer = setTimeout(connect, 1000); };
-    ws.onerror = () => { ws.close(); };
+    ws.onerror = () => { if (ws) ws.close(); };
   }
 
   function sendMessage(data) {
@@ -413,23 +508,24 @@ body.transparent-bg { background: transparent; }
 
   // ── Update Overlay ──
   function toggle(el, cls, on) {
-    if (on) el.classList.add(cls);
-    else el.classList.remove(cls);
+    el.classList.toggle(cls, !!on);
   }
 
   function updateOverlay(state) {
     if (settingsOpen) return;
 
     const show = state.adapter_connected && state.connected;
-    toggle(statusEl, 'hidden', show);
-    toggle(svgEl, 'hidden', !show);
+    toggle(controllerGroup, 'hidden', !show);
+    toggle(statusGroup, 'hidden', show || !cfg.show_status);
 
-    if (!state.adapter_connected) {
-      statusEl.innerHTML = '<div>Waiting for controller data...</div><div class="sub">Start the overlay before launching Dolphin</div>';
-      return;
-    }
-    if (!state.connected) {
-      statusEl.innerHTML = '<div>No controller on Port ' + (state.port + 1) + '</div><div class="sub">Plug in a controller</div>';
+    if (!show) {
+      if (!state.adapter_connected) {
+        statusMain.textContent = 'Waiting for controller data...';
+        statusSub.textContent = 'Start the overlay before launching Dolphin';
+      } else {
+        statusMain.textContent = 'No controller on Port ' + state.port;
+        statusSub.textContent = 'Plug in a controller';
+      }
       return;
     }
 
@@ -443,23 +539,19 @@ body.transparent-bg { background: transparent; }
     toggle(grpZ, 'pressed', b.z);
     toggle(grpStart, 'pressed', b.start);
 
-    // Triggers — analog fill
-    tlFill.setAttribute('width', 123 * state.trigger_l);
-    const rw = 123 * state.trigger_r;
-    trFill.setAttribute('x', 481 - rw);
+    // Triggers — analog fill, or the whole bar once the trigger clicks.
+    // The digital press bottoms the bar out rather than showing a separate
+    // marker; a real trigger is fully depressed when the click fires.
+    tlFill.setAttribute('width', TRIGGER_WIDTH * (b.l ? 1 : state.trigger_l));
+    const rw = TRIGGER_WIDTH * (b.r ? 1 : state.trigger_r);
+    trFill.setAttribute('x', TRIGGER_R_RIGHT - rw);
     trFill.setAttribute('width', rw);
 
-    // Triggers — digital press indicator
-    tlDigital.style.display = b.l ? '' : 'none';
-    trDigital.style.display = b.r ? '' : 'none';
-
-    // Main stick (center 95, 122)
-    mainStick.setAttribute('cx', 95 + state.stick.x * MAIN_STICK_RANGE);
-    mainStick.setAttribute('cy', 122 - state.stick.y * MAIN_STICK_RANGE);
-
-    // C-Stick (center 235, 122)
-    cStick.setAttribute('cx', 235 + state.cstick.x * C_STICK_RANGE);
-    cStick.setAttribute('cy', 122 - state.cstick.y * C_STICK_RANGE);
+    // Sticks
+    mainStick.setAttribute('cx', MAIN_STICK_CENTER.x + state.stick.x * MAIN_STICK_RANGE);
+    mainStick.setAttribute('cy', MAIN_STICK_CENTER.y - state.stick.y * MAIN_STICK_RANGE);
+    cStick.setAttribute('cx', C_STICK_CENTER.x + state.cstick.x * C_STICK_RANGE);
+    cStick.setAttribute('cy', C_STICK_CENTER.y - state.cstick.y * C_STICK_RANGE);
 
     // D-pad
     toggle(dpadUp, 'pressed', b.dpad_up);
@@ -470,16 +562,12 @@ body.transparent-bg { background: transparent; }
 
   // ── Keyboard shortcuts ──
   document.addEventListener('keydown', (e) => {
-    if (e.key >= '1' && e.key <= '4') {
-      const port = parseInt(e.key) - 1;
-      portSelect.value = port;
-      sendMessage({ port: port });
-      portLabel.textContent = 'P' + (port + 1);
-    }
+    if (e.key >= '1' && e.key <= '4') setLocal({ port: parseInt(e.key, 10) });
     if (e.key === 'c') sendMessage({ calibrate: true });
   });
 
   // ── Start ──
+  applySettings({});
   connect();
 })();
 </script>

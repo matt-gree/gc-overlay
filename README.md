@@ -28,7 +28,8 @@ macOS path needs no code signing, SIP changes, or process memory hacking.
 - `dolphin_common.py` — Game profile + controller decoding, shared by both transports
 - `memorywatcher_adapter.py` — MemoryWatcher transport (AF_UNIX socket)
 - `dme_adapter.py` — Process-memory transport (polls at ~240Hz)
-- `server.py` — Serves the overlay page and broadcasts controller state over WebSocket at ~120Hz
+- `server.py` — Serves the overlay page, broadcasts controller state over WebSocket at ~120Hz, and exposes the JSON API under `/api`
+- `overlay_settings.py` — Display settings schema, validation, and query-string aliases
 - `static/index.html` — Self-contained HTML/CSS/JS overlay with transparent background
 - `game_profiles/` — Per-game memory address configurations (valid for either transport)
 - OBS captures it as a Browser Source (native transparency, no chroma key needed)
@@ -73,11 +74,18 @@ python main.py --game mario_superstar_baseball  # Game profile (default)
 python main.py --dolphin-dir ~/path/to/dolphin  # Override Dolphin config dir
 python main.py --demo             # Demo mode with animated inputs (no Dolphin needed)
 python main.py --usb              # Direct USB adapter mode (requires pyusb + libusb)
+
+# Display defaults (also settable per-source via URL params, see below):
+python main.py --bg transparent   # Start with a transparent background
+python main.py --no-gear          # Hide the settings gear
+python main.py --no-port-label    # Hide the "P1" label
+python main.py --no-status        # Hide the "Waiting for controller data..." text
+python main.py --no-labels        # Hide the A/B/X/Y/Z/ST/L/R letters
 ```
 
 Then either:
 - **Open in browser**: Navigate to `http://localhost:8069`
-- **OBS Browser Source**: Add a Browser Source with URL `http://localhost:8069`, width `512`, height `256`
+- **OBS Browser Source**: Add a Browser Source with URL `http://localhost:8069?bg=transparent`, width `512`, height `180`
 
 ### Startup Order (memorywatcher transport only)
 
@@ -92,15 +100,112 @@ to re-establish. (Not so on the `dme` transport, which re-hooks on its own.)
 ### OBS Setup
 
 1. Add a **Browser Source** in OBS
-2. Set URL to `http://localhost:8069`
-3. Set width to `512` and height to `256`
-4. The background is transparent by default — no chroma key needed
+2. Set URL to `http://localhost:8069?bg=transparent`
+3. Set width to `512` and height to `180`
+4. `?bg=transparent` gives you native transparency — no chroma key needed
+
+The overlay is drawn as a single SVG that scales to fill the browser source, so
+512x180 is a *ratio* rather than a fixed size. Any size with that 128:45 aspect
+works; anything else letterboxes rather than distorting.
+
+For a clean broadcast source, hide the interactive chrome:
+
+```
+http://localhost:8069?bg=transparent&gear=0&portlabel=0&status=0
+```
+
+Add `&labels=0` to drop the A/B/X/Y/Z/ST/L/R letters and show shapes only.
+`show_labels` covers the controller glyphs only — the port label and the status
+text keep their own settings.
 
 ### Overlay Controls
 
-- **Settings gear** (bottom-left): Switch controller port, toggle dark background, calibrate sticks
+- **Settings gear** (bottom-left): Switch controller port, toggle background, show/hide the port label, status text and button letters, calibrate sticks
 - **Number keys 1-4**: Quick switch between controller ports
 - **C key**: Recalibrate stick centers
+
+## Display Settings
+
+Display settings can be set three ways, each layering on the one before:
+
+1. **CLI flags** at startup (`--bg`, `--no-gear`, …) set the server defaults.
+2. **URL query params** on a browser source override the defaults *for that
+   source only*. Two OBS sources can therefore show different ports.
+3. **`POST /api/settings`** at runtime changes the server defaults *and* pushes
+   to every connected source, with no page reload.
+
+| Setting | Query param | Values | Default |
+|---|---|---|---|
+| `port` | `port` | `1`–`4` | `1` |
+| `background` | `bg` | `dark`, `transparent` | `dark` |
+| `show_gear` | `gear` | boolean | `true` |
+| `show_port_label` | `portlabel` | boolean | `true` |
+| `show_status` | `status` | boolean | `true` |
+| `show_labels` | `labels` | boolean | `true` |
+
+Booleans accept `1/0`, `true/false`, `yes/no`, `on/off`. The canonical key works
+as a query param too, so `?gear=0` and `?show_gear=0` are equivalent. Unknown or
+malformed query params are ignored rather than breaking the page.
+
+### HTTP API
+
+The server listens on `127.0.0.1` and allows cross-origin calls to `/api`, so an
+external controller (e.g. PRSH) can drive the overlay. Ports are 1-indexed.
+
+**`GET /api/settings`** — current server defaults.
+
+```bash
+curl http://localhost:8069/api/settings
+# {"settings": {"port": 1, "background": "dark", "show_gear": true,
+#               "show_port_label": true, "show_status": true,
+#               "show_labels": true}, "clients": 1}
+```
+
+**`POST /api/settings`** — apply a *partial* patch. Only the keys you send
+change, so you can drive shared chrome without disturbing per-source settings
+like `port`. Returns the same shape as `GET`. Invalid keys or values return
+`400` and change nothing.
+
+```bash
+# Hide the gear and the port label on every connected source
+curl -X POST http://localhost:8069/api/settings \
+  -H 'Content-Type: application/json' \
+  -d '{"show_gear": false, "show_port_label": false}'
+```
+
+The body may also be wrapped as `{"settings": {...}}` if that reads better.
+
+**`GET /api/state?port=1`** — current controller state for one port, the same
+payload the WebSocket broadcasts. Useful for polling or debugging without a
+browser.
+
+```bash
+curl 'http://localhost:8069/api/state?port=1'
+```
+
+**`POST /api/calibrate?port=1`** — reset that port's stick centers.
+
+### WebSocket
+
+`ws://localhost:8069/ws` carries the same query params as the page URL. Messages
+are JSON tagged with `type`:
+
+- `{"type": "state", ...}` — controller state, ~120Hz
+- `{"type": "settings", "settings": {...}}` — sent on connect and whenever
+  settings change
+
+Clients may send `{"settings": {...}}` to change their *own* settings (this does
+not touch the server defaults or other sources) or `{"calibrate": true}`.
+
+### A note for PRSH
+
+Two patterns work, and they compose:
+
+- **Static**: bake the settings into each browser source URL
+  (`?port=1&bg=transparent&gear=0&portlabel=0`). Nothing else to wire up.
+- **Live**: `POST /api/settings` whenever something should change on screen.
+  Because patches are partial, posting `{"show_port_label": false}` leaves each
+  source's `port` alone.
 
 ## Game Profiles
 

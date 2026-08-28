@@ -30,6 +30,7 @@ import time
 from aiohttp import web
 
 from _version import __version__
+import overlay_settings
 from dolphin_common import load_game_profile, save_game_profile
 from memorywatcher_adapter import MemoryWatcherAdapter
 from resources import resource_path
@@ -164,6 +165,26 @@ def main():
         help='Controller port to display (default: 1)',
     )
     parser.add_argument(
+        '--bg', choices=overlay_settings.BACKGROUNDS, default='dark',
+        help='Overlay background (default: dark; use transparent for OBS)',
+    )
+    parser.add_argument(
+        '--no-gear', action='store_true',
+        help='Hide the settings gear button',
+    )
+    parser.add_argument(
+        '--no-port-label', action='store_true',
+        help='Hide the "P1" port label',
+    )
+    parser.add_argument(
+        '--no-status', action='store_true',
+        help='Hide the "Waiting for controller data..." text',
+    )
+    parser.add_argument(
+        '--no-labels', action='store_true',
+        help='Hide the A/B/X/Y/Z/ST/L/R letters on the controller',
+    )
+    parser.add_argument(
         '--demo', action='store_true',
         help='Demo mode with animated controller inputs',
     )
@@ -237,7 +258,14 @@ def main():
         adapter = make_dolphin_adapter(transport, profile_path, args)
 
     adapter.start()
-    app = create_app(adapter, port=args.controller - 1)
+    app = create_app(adapter, settings={
+        'port': args.controller,
+        'background': args.bg,
+        'show_gear': not args.no_gear,
+        'show_port_label': not args.no_port_label,
+        'show_status': not args.no_status,
+        'show_labels': not args.no_labels,
+    })
 
     if args.demo:
         mode = "DEMO"
@@ -249,7 +277,8 @@ def main():
     print(f"\n  GC Overlay [{mode}]")
     print(f"  Controller port: {args.controller}")
     print(f"  Overlay URL:     http://localhost:{args.port}")
-    print(f"  OBS Browser Source: http://localhost:{args.port} (512x256)")
+    print(f"  OBS Browser Source: http://localhost:{args.port}?bg=transparent (512x180)")
+    print(f"  Settings API:    http://localhost:{args.port}/api/settings")
     print()
 
     def shutdown(sig, frame):

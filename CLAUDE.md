@@ -11,7 +11,8 @@ gc-overlay/
 ├── memorywatcher_adapter.py # MemoryWatcher transport (AF_UNIX; macOS, Linux)
 ├── dme_adapter.py       # Process-memory transport (Windows, Linux)
 ├── gc_adapter.py        # USB communication with GC adapter via pyusb (--usb mode)
-├── server.py            # aiohttp WebSocket + HTTP server (~120Hz broadcast)
+├── server.py            # aiohttp WebSocket + HTTP server (~120Hz broadcast) + /api
+├── overlay_settings.py  # Display settings schema, validation, query aliases
 ├── diag_memorywatcher.py # Diagnostic tool for MemoryWatcher troubleshooting
 ├── static/
 │   └── index.html       # Self-contained SVG overlay (inline CSS/JS)
@@ -79,13 +80,50 @@ python main.py --port 8080    # Custom port
 python main.py --controller 2 # Show port 2
 python main.py --transport dme # Force a transport (auto|memorywatcher|dme)
 python main.py --game mario_superstar_baseball  # Game profile
+
+# Display defaults (per-source overrides go in the URL, see below)
+python main.py --bg transparent --no-gear --no-port-label --no-status
 ```
 
 On the memorywatcher transport, start the overlay before launching Dolphin —
 MemoryWatcher connects at game boot and does not retry. The dme transport hooks
 whenever Dolphin appears and re-hooks after a restart.
 
-OBS Browser Source URL: `http://localhost:8069?bg=transparent` (512x256)
+OBS Browser Source URL: `http://localhost:8069?bg=transparent` (512x180)
+
+## Display Settings API
+
+Settings layer: `overlay_settings.DEFAULTS` → CLI flags (server defaults) → URL
+query params (per browser source) → `POST /api/settings` (live, all sources).
+Ports are 1-indexed everywhere except `adapter.get_state()`, which is 0-indexed.
+
+| Setting | Query param | Values |
+|---|---|---|
+| `port` | `port` | `1`–`4` |
+| `background` | `bg` | `dark`, `transparent` |
+| `show_gear` | `gear` | boolean |
+| `show_port_label` | `portlabel` | boolean |
+| `show_status` | `status` | boolean |
+| `show_labels` | `labels` | boolean |
+
+Endpoints (CORS-open on `/api`, server binds `127.0.0.1` only):
+
+| Route | Purpose |
+|---|---|
+| `GET /api/settings` | `{"settings": {...}, "clients": N}` |
+| `POST /api/settings` | Partial patch; updates defaults + pushes to all clients |
+| `GET /api/state?port=1` | Same payload the WebSocket broadcasts |
+| `POST /api/calibrate?port=1` | Reset that port's stick centers |
+
+`POST /api/settings` applies **only the keys present**, so shared chrome can be
+driven without disturbing per-source settings like `port`. Invalid keys/values
+return `400` and change nothing.
+
+WebSocket messages are tagged: `{"type": "state", ...}` at ~120Hz and
+`{"type": "settings", "settings": {...}}` on connect and on change. The page
+forwards its own query string to `/ws` so the server resolves each client's
+effective settings in one place. Clients may send `{"settings": {...}}` (scoped
+to that client only) or `{"calibrate": true}`.
 
 ---
 
@@ -334,50 +372,220 @@ For Mario Superstar Baseball, the controller data addresses in MEM1 need to be f
 ## Overlay Design Notes
 
 ### SVG-Based Rendering
-The overlay uses a single `<svg viewBox="0 0 512 256">` with all elements as SVG shapes. This gives precise positioning and crisp rendering at any scale.
+The overlay is a single `<svg viewBox="0 0 512 180">` scaled to fill the browser
+source (`width/height: 100%`, `preserveAspectRatio="xMidYMid meet"`), so 512x180
+is a ratio rather than a fixed size. Status text lives inside the SVG so it
+scales with everything else.
 
-### Button Layout (pixel coordinates in 512x256 SVG space)
+### Layout (pixel coordinates in 512x180 SVG space)
+The D-pad sits in the diagonal wedge below and between the two stick gates
+rather than below the main stick, which is what lets the whole overlay fit in
+180px instead of 256px. Both gates share a centerline at y=96; the wedge exists
+because the octagons taper as they descend, so the horizontal gap between them
+widens below the centerline.
+
 | Element | Position | Size |
 |---------|----------|------|
-| L Trigger | (30, 14) | 125x22 rect |
-| R Trigger | (357, 14) | 125x22 rect |
-| Main Stick Gate | center (95, 122) | octagon, r=55 |
-| Main Stick Head | center (95, 122) | circle, r=20 |
-| C-Stick Gate | center (235, 122) | octagon, r=40 |
-| C-Stick Head | center (235, 122) | circle, r=15 |
-| D-Pad | center (95, 218) | cross, 16px arms |
-| A Button | center (390, 118) | circle, r=26 |
-| B Button | center (338, 162) | circle, r=15 |
-| X Button | arc right of A | radius 37, -55° to 55°, stroke 14px |
-| Y Button | arc above A | radius 37, -145° to -35°, stroke 14px |
-| Z Button | (426, 46) | 50x26 pill |
-| Start | center (308, 130) | circle, r=11 |
+| L Trigger | (27, 6) | 130x30 rect, rx 6 |
+| R Trigger | (287, 6) | 130x30 rect, rx 6 |
+| Z Button | (429, 6) | 56x30 pill, rx 15 |
+| Main Stick Gate | center (84, 100) | octagon, circumradius 54 |
+| Main Stick Head | center (84, 100) | circle, r=29, travel 23 |
+| C-Stick Gate | center (240, 100) | octagon, circumradius 38 |
+| C-Stick Head | center (240, 100) | circle, r=20, travel 16 |
+| D-Pad | center (170, 138) | plus, 20px arms, 62x62 overall |
+| A Button | center (398, 122) | circle, r=36 |
+| B Button | center (334, 148) | circle, r=21 |
+| X Button | bean right of A | centreline r 60, half-thickness 16, -30° to 10° |
+| Y Button | bean above A | centreline r 60, half-thickness 16, -128° to -88° |
+| Start | center (302, 112) | circle, r=14 |
+| Port label | (502, 172) | text-anchor end |
+
+**L, R and Z share the top row**, with R bumped left (x=287, not 355) so Z can
+take the top-right corner. Z used to sit at y=45..73, directly above the X bean
+and in the middle of the A cluster's space; moving it into the trigger row is
+what freed X to grow.
+
+The A/X/Y cluster is sized to fill the diagonal toward B. X straddles A's
+centerline (rather than sitting entirely above it) so the group reads as a
+diagonal band running from Z down to B.
+
+With Z out of the way, **the Y bean under the top row is what pins A's y.** Y's
+topmost point is at angle -90°, which its span includes, so:
+
+```
+Y top    = A.y - arc_radius - stroke/2
+arc_radius = A.r + 2 (A's half-stroke) + 5 (gap) + stroke/2
+
+=> Y top = A.y - A.r - 7 - stroke
+```
+
+Y must clear the trigger row's visual bottom of 37.75 by ~6, so:
+
+```
+Y visual top = A.y - R - h - 2  =  A.y - A.r - 2h - gap - 6
+A.y >= A.r + 2h + gap + 49.75
+```
+
+At A.r=36, h=16, gap=4 that floor is 121.75; A sits at 122, i.e. 0.25 of slack
+(the measured R-to-Y clearance is 6.25 against a 6 baseline). **Every increase
+to A's radius or the bean thickness raises that floor by one or two px
+respectively**, and A cannot absorb it by moving down — B's visual bottom is
+already 171 of 180. Note the top row spans the full width, so no amount of
+shuffling L/R/Z lifts this limit; only a shorter Y span that excludes -90°
+would.
+
+There is now ~37px of slack between Z's bottom and the X bean's top cap, since
+X no longer has anything above it. Rotating X's span upward (e.g. -45°..-5°)
+would fill it, at the cost of X no longer straddling A's centerline.
 
 ### Regular Octagon Computation
-For flat-top orientation, vertices at angles -67.5° + i×45° (i=0..7):
+**Orientation matters and is easy to get wrong.** The gates have vertices on
+the cardinals and the diagonals (angles `i x 45°`), so there is a point at the
+top, bottom, left and right — these are the notches of a real GC gate, and this
+is the look PRSH ships. The earlier source wrote flat-side points and then
+applied `transform="rotate(22.5 cx cy)"` to land on the same orientation; the
+vertices are now baked into the `points` attribute instead, so what you read is
+what renders. Do not "simplify" these back to a flat-top octagon.
+
+Because the vertices are on the cardinals, the bounding box is `2 x
+circumradius` (not `2 x apothem`), which is what sets the vertical clearance
+against the trigger bars.
+
 ```
-Main (cx=95, cy=122, r=55):  "116,71 146,101 146,143 116,173 74,173 44,143 44,101 74,71"
-C-Stick (cx=235, cy=122, r=40): "250,85 272,107 272,137 250,159 220,159 198,137 198,107 220,85"
+Vertex i = (cx + r x cos(45i°), cy + r x sin(45i°)), i = 0..7
+
+Main (cx=84, cy=100, r=54):
+  "138,100 122.2,138.2 84,154 45.8,138.2 30,100 45.8,61.8 84,46 122.2,61.8"
+C-Stick (cx=240, cy=100, r=38):
+  "278,100 266.9,126.9 240,138 213.1,126.9 202,100 213.1,73.1 240,62 266.9,73.1"
 ```
 
-### X/Y Bean Arc Computation
-Both arcs centered on A button (390, 118) at radius 37 with stroke-width 14 and round linecaps:
-- **X (right of A):** `M 411.2 87.7 A 37 37 0 0 1 411.2 148.3` — spans -55° to 55°
-- **Y (above A):** `M 359.7 96.8 A 37 37 0 0 1 420.3 96.8` — spans -145° to -35°
-- Inner edge of stroke is ~3px from A's circle (radius 37 - 7 = 30; A radius = 26)
+The gates sit at cy=100 rather than higher because the main gate's top vertex
+has to clear the L trigger: at cy=96 with the 30px-tall triggers that gap was
+only 2.25px. Dropping both gates 4px opens it to 6.25 without pushing the D-pad
+(which follows the wedge between them) past the bottom edge.
+
+### Stick Head vs Travel
+`head_radius + travel` is the invariant: it's the radius the head's edge sweeps
+at full deflection, and it alone decides containment. It is set to the midpoint
+between the gate's notches (`circumradius`) and its flats
+(`apothem = circumradius x cos(22.5°)`):
+
+| | circumradius | apothem | head + travel |
+|---|---|---|---|
+| Main | 54 | 49.9 | **52** (r 29 + 23) |
+| C-stick | 38 | 35.1 | **36** (r 20 + 16) |
+
+So **making the head bigger costs travel one-for-one** — trade within the sum
+and containment is untouched; raise the sum and the head starts breaking the
+gate line. Head diameter is ~54% of gate width at these values, matching the
+proportion PRSH ships.
+
+At the flats (22.5° off a cardinal) the head's edge sits ~1.4px past the gate
+stroke, but only for magnitude-1.0 input. A real gate limits magnitude to
+`cos(22.5°) = 0.924` there, which pulls the head back inside; the poke is only
+visible in `--demo`, whose stick traces a true circle.
+
+### D-Pad Construction
+A single `.dpad-outline` plus-shaped path — plain, square inner corners — sits
+over four fill-only `.dpad-arm` polygons. Each arm polygon is the whole arm
+*plus a 45° point into the middle*, so a held direction reads as an arrow aimed
+at the centre:
+
+```
+up:    160,107  180,107  180,128  170,138  160,128
+down:  160,169  180,169  180,148  170,138  160,148
+left:  139,128  139,148  160,148  170,138  160,128
+right: 201,128  201,148  180,148  170,138  180,128
+```
+
+The four points meet exactly at the centre (170,138) and tile the centre square,
+so a diagonal press joins into one clean L with a diagonal seam and no dark hole.
+The 45° belongs to the **fill only** — do not chamfer the grey outline.
+
+### X/Y Bean Construction
+X and Y are **outlined** capsules, not thick stroked arcs, so they fill on press
+like A/B/Z/Start. A stroked arc gives you the capsule's *silhouette* and can
+only change colour; an outline needs the capsule's actual boundary as a closed
+path.
+
+Given A's centre `C`, centreline radius `R=60`, half-thickness `h=16`, and a
+span `θ1..θ2`, the boundary is four arcs — outer, end cap, inner (reversed),
+start cap:
+
+```
+M   outer(θ1)                          outer(θ) = C + (R+h)·(cos θ, sin θ)
+A   R+h R+h 0 0 1  outer(θ2)           inner(θ) = C + (R-h)·(cos θ, sin θ)
+A   h   h   0 0 1  inner(θ2)           cap radius = h, sweep 1
+A   R-h R-h 0 0 0  inner(θ1)           inner arc runs backwards => sweep 0
+A   h   h   0 0 1  outer(θ1)  Z
+```
+
+- **X** (-30°..10°): `M 463.82 84.0 A 76 76 0 0 1 472.85 135.2 A 16 16 0 0 1 441.33 129.64 A 44 44 0 0 0 436.11 100.0 A 16 16 0 0 1 463.82 84.0 Z`
+- **Y** (-128°..-88°): `M 351.21 62.11 A 76 76 0 0 1 400.65 46.05 A 16 16 0 0 1 399.54 78.03 A 44 44 0 0 0 370.91 87.33 A 16 16 0 0 1 351.21 62.11 Z`
+
+Labels still sit at the centreline midpoint angle (radius `R`, not `R±h`).
+
+The 40° span is the intended bean *length* — widen these by raising `h`, not by
+extending the span. `R` is derived, not free:
+
+```
+R = A.r + 4 + gap + h      (4 = A's half-stroke + the bean's half-stroke)
+```
+
+so `h` and `R` move together. At A.r=36, gap=4, h=16 that gives R=60.
+
+Endpoints are `(cx + r x cos θ, cy + r x sin θ)`. Both spans are under 180°, so
+large-arc-flag is 0; both run clockwise in SVG's y-down space, so sweep-flag
+is 1.
+
+### Stroke Weights
+Strokes are deliberately heavy so the overlay stays legible when scaled down
+into a stream layout: gates and button shapes 4, D-pad outline 4, trigger
+outline and Start 3.5, stick heads 2.5, X/Y bean outlines 4.
+
+### Trigger Fill
+The bar shows the analog value, and the **digital click bottoms the bar out** —
+`b.l ? 1 : state.trigger_l`. There is no separate click marker; a real trigger is
+fully depressed when the click fires, so a full bar is the honest reading. (An
+earlier build drew a 7px sliver at the inner end for the digital bit.)
+
+### Verifying Clearances
+`getBBox()` comparisons **lie** here: a square box around an octagon corner or a
+curved bean reports overlap where the shapes are comfortably apart (the A/X and
+D-pad/gate pairs both read as -3 by bbox while actually holding 5px and 7.7px).
+Measure real geometry instead — sample both outlines with `getPointAtLength()`,
+take the minimum pairwise distance, and subtract each element's half stroke.
+
+### No Alpha
+**Every shape is fully opaque.** No `opacity`, `fill-opacity`, `stroke-opacity`,
+`rgba()`, or 8-digit hex anywhere in the SVG — a partially transparent shape
+composites against whatever is behind the browser source in OBS and shifts
+colour per scene. `fill: none` / `stroke: none` are fine: those paint nothing
+rather than painting something translucent. The only intentional transparency
+is the page background under `background: transparent`.
 
 ### Color Scheme (all fully opaque)
 | Element | Unpressed | Pressed |
 |---------|-----------|---------|
 | A | stroke #00E196 | fill #00E196 |
 | B | stroke #E63E3E | fill #E63E3E |
-| X arc | stroke #999999 | stroke #FFFFFF |
-| Y arc | stroke #999999 | stroke #FFFFFF |
+| X bean | stroke #AAAAAA | fill #FFFFFF |
+| Y bean | stroke #AAAAAA | fill #FFFFFF |
 | Z | stroke #B36CD6 | fill #B36CD6 |
 | Start | stroke #AAAAAA | fill #FFFFFF |
-| D-pad | stroke #AAAAAA | fill #FFFFFF |
+| D-pad | stroke #AAAAAA | arm fill #FFFFFF |
 | Main gate | stroke #AAAAAA | — |
 | C-stick gate | stroke #B8960F | — |
 | Main stick | fill #FFFFFF | — |
 | C-stick | fill #FFD43B | — |
 | Triggers | fill #FFFFFF | — |
+
+Pressed labels use a very dark tint of their own hue rather than the page
+background, so they stay readable on a transparent background.
+
+All glyphs (A/B/X/Y/Z/ST/L/R) carry `.btn-label`, `.arc-label` or
+`.trigger-label`, and the `show_labels` setting hides them by toggling
+`.no-labels` on the SVG root. The port label and the status text are
+deliberately not covered — they have their own settings.
