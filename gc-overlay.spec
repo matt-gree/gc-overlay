@@ -15,6 +15,9 @@ Notes:
     * USB mode (--usb) needs a native libusb at runtime. It is intentionally
       not bundled here; Dolphin and demo modes (what PRSH uses) need nothing
       extra. Standalone users who want --usb install libusb themselves.
+    * The dme transport (default on Windows) is the opposite case: its wheel
+      is a self-contained compiled extension linking only system libraries,
+      so it bundles into the executable and the producer installs nothing.
 """
 
 block_cipher = None
@@ -30,6 +33,11 @@ a = Analysis(
     ],
     hiddenimports=[
         'aiohttp',
+        # Dolphin transports are imported lazily by main.resolve_transport,
+        # so PyInstaller's static analysis cannot see this one.
+        'dme_adapter',
+        'dolphin_memory_engine',
+        'dolphin_memory_engine._dolphin_memory_engine',
         # Optional USB backend — imported lazily by --usb mode.
         'usb',
         'usb.core',

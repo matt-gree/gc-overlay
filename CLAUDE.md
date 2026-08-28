@@ -1,13 +1,15 @@
 # GC Overlay
 
-macOS-compatible GameCube controller input overlay for OBS, inspired by [M'Overlay](https://github.com/bkacjios/m-overlay).
+Cross-platform GameCube controller input overlay for OBS, inspired by [M'Overlay](https://github.com/bkacjios/m-overlay).
 
 ## Architecture
 
 ```
 gc-overlay/
-├── main.py              # Entry point, CLI args, DemoAdapter for --demo mode
-├── dolphin_adapter.py   # Dolphin MemoryWatcher adapter (default mode)
+├── main.py              # Entry point, CLI args, transport selection, DemoAdapter
+├── dolphin_common.py    # Game profile + controller decoding (transport-agnostic)
+├── memorywatcher_adapter.py # MemoryWatcher transport (AF_UNIX; macOS, Linux)
+├── dme_adapter.py       # Process-memory transport (Windows, Linux)
 ├── gc_adapter.py        # USB communication with GC adapter via pyusb (--usb mode)
 ├── server.py            # aiohttp WebSocket + HTTP server (~120Hz broadcast)
 ├── diag_memorywatcher.py # Diagnostic tool for MemoryWatcher troubleshooting
@@ -26,8 +28,32 @@ The app supports multiple input source backends. Each must implement:
 - `get_state(port)` — returns dict with `connected`, `buttons`, `stick`, `cstick`, `trigger_l`, `trigger_r`
 - `calibrate(port)` — reset stick centers
 
-### Source 1: Dolphin MemoryWatcher (dolphin_adapter.py) — IMPLEMENTED (default)
-Reads controller state from Dolphin's emulated GameCube memory via the built-in MemoryWatcher Unix domain socket. Works during Netplay since all players' inputs exist in the local Dolphin process memory. Requires a game profile with the correct memory addresses. No additional drivers or libraries needed beyond aiohttp.
+**The two Dolphin transports are peers, not a primary and a fallback.** Both read
+the same emulated memory and share `dolphin_common.py` (profile + `DolphinPort` +
+`FIELD_UPDATERS`); they differ only in how bytes are obtained, and which one is
+available is a property of the platform. Neither module imports the other — a new
+transport is a third peer, never a graft onto one of these two. `main.resolve_transport`
+is the one place that decides.
+
+### Source 1: Dolphin MemoryWatcher (memorywatcher_adapter.py) — IMPLEMENTED (default on macOS/Linux)
+Dolphin *pushes* memory changes to us over its built-in MemoryWatcher Unix domain socket. Works during Netplay since all players' inputs exist in the local Dolphin process memory. Requires a game profile with the correct memory addresses. No additional drivers or libraries needed beyond aiohttp.
+
+**Not available on Windows, and cannot be made so by a build flag.** Dolphin guards
+`MemoryWatcher.cpp` with `if(UNIX)` (and `USE_MEMORYWATCHER` at every call site), and
+the class is `sys/socket.h` + `AF_UNIX` + `SOCK_DGRAM` — a type Windows' AF_UNIX does
+not support at all. Making it work there means a new transport in Dolphin (named
+pipes, as FasterMelee/Ishiiruka did), not a flag.
+
+### Source 1b: Dolphin process memory (dme_adapter.py) — IMPLEMENTED (default on Windows)
+We *poll* Dolphin's emulated memory directly, as M'Overlay does on Windows, via the
+`dolphin-memory-engine` wheel (a compiled extension vendoring aldelaro5's memory-access
+core — a library, **not** the DME GUI app; nothing is installed on the producer's
+machine and no Dolphin change is needed). One contiguous read per tick covers every
+port. Blocked on macOS, where Dolphin ships a hardened runtime with no `get-task-allow`
+entitlement — the reason the MemoryWatcher path exists at all.
+
+Note `DolphinStatus` is **not** re-exported from `dolphin_memory_engine.__init__`;
+import it from `dolphin_memory_engine._dolphin_memory_engine`.
 
 ### Source 2: Direct USB (gc_adapter.py) — IMPLEMENTED (--usb flag)
 Reads the Nintendo WUP-028 GameCube Controller Adapter directly over USB. Works when a physical controller is plugged into the local machine's adapter. Requires pyusb + libusb + GCAdapterDriver (macOS).
@@ -46,15 +72,18 @@ Generates animated fake controller data for testing without hardware.
 
 ```bash
 source venv/bin/activate
-python main.py                # Dolphin mode (default)
+python main.py                # Dolphin mode (default), transport auto-selected
 python main.py --demo         # Demo mode (no hardware needed)
 python main.py --usb          # Direct USB adapter mode (requires pyusb)
 python main.py --port 8080    # Custom port
 python main.py --controller 2 # Show port 2
+python main.py --transport dme # Force a transport (auto|memorywatcher|dme)
 python main.py --game mario_superstar_baseball  # Game profile
 ```
 
-Start the overlay before launching Dolphin. MemoryWatcher connects at game boot.
+On the memorywatcher transport, start the overlay before launching Dolphin —
+MemoryWatcher connects at game boot and does not retry. The dme transport hooks
+whenever Dolphin appears and re-hooks after a restart.
 
 OBS Browser Source URL: `http://localhost:8069?bg=transparent` (512x256)
 

@@ -25,7 +25,7 @@ import socket
 import sys
 import time
 
-from dolphin_adapter import DOLPHIN_DIRS, find_dolphin_dir
+from memorywatcher_adapter import DOLPHIN_DIRS, find_dolphin_dir
 
 
 # Basic addresses that should change during any game
