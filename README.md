@@ -1,29 +1,48 @@
 # GC Overlay
 
-A macOS-compatible GameCube controller input overlay for OBS, inspired by [M'Overlay](https://github.com/bkacjios/m-overlay).
+A cross-platform GameCube controller input overlay for OBS, inspired by [M'Overlay](https://github.com/bkacjios/m-overlay).
 
-Reads controller input from Dolphin (or Project Rio, Slippi, etc.) via the built-in MemoryWatcher feature and displays a clean overlay that OBS can capture as a Browser Source with full transparency. Works during **Netplay** since all players' inputs exist in the local Dolphin process memory.
+Reads controller input from Dolphin (or Project Rio, Slippi, etc.) and displays a clean overlay that OBS can capture as a Browser Source with full transparency. Works during **Netplay** since all players' inputs exist in the local Dolphin process memory.
 
 ![overlay preview](https://img.shields.io/badge/status-beta-yellow)
 
 ## How It Works
 
-GC Overlay connects to Dolphin's MemoryWatcher, a built-in feature that watches emulated GameCube memory addresses and reports changes over a Unix domain socket. This means it works on **macOS** without any code signing, SIP changes, or process memory hacking.
+There are two ways to get controller state out of Dolphin, and which one is
+available is a property of the platform — not a primary and a fallback:
+
+| Transport | How | macOS | Windows | Linux |
+|---|---|:-:|:-:|:-:|
+| `memorywatcher` | Dolphin *pushes* memory changes to us over a Unix domain socket (its built-in MemoryWatcher) | ✅ | ❌ | ✅ |
+| `dme` | We *poll* the Dolphin process's emulated memory, as M'Overlay does | ❌ | ✅ | ✅ |
+
+MemoryWatcher does not exist on Windows: Dolphin guards `MemoryWatcher.cpp`
+with `if(UNIX)`, so a Windows build has no socket to connect to. Conversely,
+reading another process's memory is blocked on macOS, where Dolphin ships a
+hardened runtime with no `get-task-allow` entitlement — which is why the
+macOS path needs no code signing, SIP changes, or process memory hacking.
+
+`--transport auto` (the default) picks the right one for your platform.
 
 **Architecture:**
-- `dolphin_adapter.py` — Reads controller state from Dolphin via MemoryWatcher (~500Hz)
+- `dolphin_common.py` — Game profile + controller decoding, shared by both transports
+- `memorywatcher_adapter.py` — MemoryWatcher transport (AF_UNIX socket)
+- `dme_adapter.py` — Process-memory transport (polls at ~240Hz)
 - `server.py` — Serves the overlay page and broadcasts controller state over WebSocket at ~120Hz
 - `static/index.html` — Self-contained HTML/CSS/JS overlay with transparent background
-- `game_profiles/` — Per-game memory address configurations
+- `game_profiles/` — Per-game memory address configurations (valid for either transport)
 - OBS captures it as a Browser Source (native transparency, no chroma key needed)
 
 ## Prerequisites
 
 - **Python 3.10+**
-- **aiohttp** (`pip install aiohttp`)
-- **Dolphin**, **Project Rio**, or **Slippi Dolphin** installed on macOS
+- **Dolphin**, **Project Rio**, or **Slippi Dolphin**
+- `pip install -r requirements.txt`
 
-No additional drivers or libraries are needed for Dolphin mode.
+No additional drivers or libraries are needed for Dolphin mode on any
+platform. The `dme` transport's `dolphin-memory-engine` dependency is a
+small self-contained wheel — it is a *library*, not the Dolphin Memory
+Engine GUI application, and nothing extra is installed on your machine.
 
 ## Setup
 
@@ -32,12 +51,15 @@ git clone https://github.com/your-username/gc-overlay.git
 cd gc-overlay
 python3 -m venv venv
 source venv/bin/activate
-pip install aiohttp
+pip install -r requirements.txt
 ```
 
 ## Usage
 
-**Important:** Start the overlay *before* launching Dolphin. MemoryWatcher connects at game boot and doesn't retry.
+**On macOS and Linux (memorywatcher transport):** start the overlay *before*
+launching Dolphin. MemoryWatcher connects at game boot and doesn't retry.
+The `dme` transport has no such requirement — it hooks whenever Dolphin
+appears, and re-hooks after a restart.
 
 ```bash
 # Dolphin mode (default) — reads from Dolphin's emulated memory
@@ -45,6 +67,7 @@ python main.py
 
 # Options:
 python main.py --port 8069        # Change server port (default: 8069)
+python main.py --transport dme    # Force a transport (auto|memorywatcher|dme)
 python main.py --controller 2     # Show port 2 instead of port 1
 python main.py --game mario_superstar_baseball  # Game profile (default)
 python main.py --dolphin-dir ~/path/to/dolphin  # Override Dolphin config dir
@@ -56,14 +79,15 @@ Then either:
 - **Open in browser**: Navigate to `http://localhost:8069`
 - **OBS Browser Source**: Add a Browser Source with URL `http://localhost:8069`, width `512`, height `256`
 
-### Startup Order
+### Startup Order (memorywatcher transport only)
 
 1. Start the overlay: `python main.py`
 2. Launch Dolphin / Project Rio
 3. Boot your game
 4. The terminal will print "Receiving controller data from Dolphin." when data starts flowing
 
-If you restart the overlay, you must also restart Dolphin for the connection to re-establish.
+If you restart the overlay, you must also restart Dolphin for the connection
+to re-establish. (Not so on the `dme` transport, which re-hooks on its own.)
 
 ### OBS Setup
 
@@ -133,7 +157,16 @@ python main.py --usb
 
 ## Troubleshooting
 
-### Dolphin Mode
+### Dolphin Mode — dme transport (default on Windows)
+
+**"Waiting for Dolphin/Project Rio to start..."**
+- The overlay is polling for the process and will hook as soon as it appears.
+- "Dolphin is running but no game is booted" means it found Dolphin and is waiting on the game.
+
+**"Warning: booted game is 'XXXXXX', but this profile is for 'GYQE01'"**
+- A different game is loaded. The overlay will draw meaningless input until the profile's game is booted.
+
+### Dolphin Mode — memorywatcher transport (default on macOS/Linux)
 
 **"Waiting for controller data..." stays on screen**
 - Make sure you started the overlay *before* launching Dolphin
@@ -177,5 +210,6 @@ The overlay automatically checks for config directories of:
 
 - **Python 3.10+** with asyncio
 - **aiohttp** — Async HTTP + WebSocket server
+- **dolphin-memory-engine** — Process-memory reads (only used by the `dme` transport)
 - **pyusb** — USB communication via libusb (only needed for `--usb` mode)
 - **HTML/CSS/JS** — Self-contained SVG overlay (no build step)

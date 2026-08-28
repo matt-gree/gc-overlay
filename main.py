@@ -22,6 +22,7 @@ Requirements:
 import argparse
 import math
 import os
+import platform
 import signal
 import sys
 import time
@@ -98,6 +99,54 @@ class DemoAdapter:
         pass
 
 
+def resolve_transport(requested):
+    """Pick the Dolphin transport, and refuse one this platform cannot run.
+
+    The two adapters are peers, not a primary and a fallback: MemoryWatcher
+    needs Dolphin to have compiled it (guarded by if(UNIX), so never on
+    Windows), and DME needs permission to read another process's memory
+    (free on Windows and Linux, blocked by macOS's hardened runtime). Linux
+    can run either, so this is a preference, not a capability test.
+    """
+    system = platform.system()
+
+    if requested == 'auto':
+        return 'dme' if system == 'Windows' else 'memorywatcher'
+
+    if requested == 'memorywatcher' and system == 'Windows':
+        print(
+            "Error: the memorywatcher transport does not exist on Windows.\n"
+            "Dolphin guards MemoryWatcher.cpp with if(UNIX), so a Windows "
+            "build has no socket to connect to.\nUse --transport dme."
+        )
+        sys.exit(1)
+
+    if requested == 'dme' and system == 'Darwin':
+        print(
+            "Warning: the dme transport cannot hook Dolphin on macOS without "
+            "re-signing it.\nUse --transport memorywatcher (the default here)."
+        )
+
+    return requested
+
+
+def make_dolphin_adapter(transport, profile_path, args):
+    """Build the adapter for the chosen transport."""
+    if transport == 'dme':
+        try:
+            from dme_adapter import DmeAdapter
+        except ImportError:
+            print("Error: the dme transport requires dolphin-memory-engine:")
+            print("  pip install dolphin-memory-engine")
+            sys.exit(1)
+        if args.dolphin_dir:
+            print("Note: --dolphin-dir is unused by the dme transport "
+                  "(it finds the process, not a config directory).")
+        return DmeAdapter(profile_path)
+
+    return MemoryWatcherAdapter(profile_path, dolphin_dir=args.dolphin_dir)
+
+
 def main():
     parser = argparse.ArgumentParser(
         description='GC Overlay - GameCube Controller Input Display',
@@ -123,8 +172,17 @@ def main():
         help='Read from a direct USB GC adapter (requires pyusb + libusb)',
     )
     parser.add_argument(
+        '--transport', choices=['auto', 'memorywatcher', 'dme'], default='auto',
+        help=(
+            'How to read Dolphin memory. memorywatcher = Dolphin pushes over '
+            'an AF_UNIX socket (macOS, Linux); dme = poll the Dolphin process '
+            '(Windows, Linux). Default: auto (per platform)'
+        ),
+    )
+    parser.add_argument(
         '--dolphin-dir', type=str, default=None,
-        help='Override Dolphin/Project Rio config directory path',
+        help='Override Dolphin/Project Rio config directory path '
+             '(memorywatcher transport only)',
     )
     parser.add_argument(
         '--game', type=str, default='mario_superstar_baseball',
@@ -170,12 +228,13 @@ def main():
             sys.exit(1)
         adapter = GCAdapter()
     else:
-        # Default: Dolphin mode via MemoryWatcher
+        # Default: Dolphin mode, via whichever transport this platform allows.
         if not os.path.exists(profile_path):
             print(f"Error: Game profile not found: {profile_path}")
             print(f"Available profiles in {PROFILES_DIR}/")
             sys.exit(1)
-        adapter = MemoryWatcherAdapter(profile_path, dolphin_dir=args.dolphin_dir)
+        transport = resolve_transport(args.transport)
+        adapter = make_dolphin_adapter(transport, profile_path, args)
 
     adapter.start()
     app = create_app(adapter, port=args.controller - 1)
@@ -185,7 +244,7 @@ def main():
     elif args.usb:
         mode = "USB"
     else:
-        mode = "DOLPHIN"
+        mode = f"DOLPHIN/{transport.upper()}"
 
     print(f"\n  GC Overlay [{mode}]")
     print(f"  Controller port: {args.controller}")
