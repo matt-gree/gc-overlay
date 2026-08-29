@@ -83,7 +83,7 @@ python main.py --game mario_superstar_baseball  # Game profile
 
 # Display defaults (per-source overrides go in the URL, see below)
 python main.py --bg transparent --no-gear --no-port-label --no-status
-python main.py --no-keyline --idle-fill  # legibility knobs, see Overlay Design Notes
+python main.py --no-keyline --idle-fill 0.5  # legibility knobs, see Overlay Design Notes
 ```
 
 On the memorywatcher transport, start the overlay before launching Dolphin —
@@ -107,7 +107,7 @@ Ports are 1-indexed everywhere except `adapter.get_state()`, which is 0-indexed.
 | `show_status` | `status` | boolean |
 | `show_labels` | `labels` | boolean |
 | `show_keyline` | `keyline` | boolean |
-| `show_idle_fill` | `idlefill` | boolean |
+| `idle_fill_opacity` | `idlefill` | `0`-`1` |
 
 Endpoints (CORS-open on `/api`, server binds `127.0.0.1` only):
 
@@ -641,7 +641,7 @@ Two glyph exceptions:
   on the background, and the keyline is what carries them across both.
 
 ### Idle Fill
-`show_idle_fill` (`?idlefill=1`, off by default) puts a dark plate inside every
+`idle_fill_opacity` (`?idlefill=0.5`, `0` by default) puts a dark plate inside every
 unpressed shape, so a button reads as a filled chip rather than a hollow ring.
 It is the second half of the legibility story: the keyline separates the
 overlay from the scene behind it, the idle fill gives each button a body.
@@ -660,6 +660,22 @@ so a button keeps its identity with the letters off:
 Same inherited-custom-property trick as `--label-display`, for the same
 shadow-boundary reason: `#controller-svg.idle-fill` sets `--idle-*`, and every
 shape reads `fill: var(--idle-x, none)`.
+
+**It is an OPACITY, not a switch, and the alpha rides in the colour.** Each
+`--idle-*` is `rgb(R G B / var(--idle-alpha, 1))`, with `--idle-alpha` set
+inline from the setting. `fill-opacity` would have been the obvious place and is
+wrong: a pressed button replaces `fill` outright (`.grp-a.pressed .shape { fill:
+#00E196 }`), so a fill-opacity on those elements dims the LIT button by exactly
+the amount the producer dialled the idle plate down — the one part of the
+drawing that must stay at full strength. At `0` the `.idle-fill` class comes off
+entirely so shapes fall back to `fill: none`, which is the original hollow
+drawing rather than a transparent plate that merely looks like it.
+
+There is deliberately no separate `show_idle_fill`: `0` already means off, and a
+switch beside an opacity creates a state (on, at zero) that means nothing. The
+1.3.0 boolean spellings stay in `ALIASES` and coerce to `1.0`/`0.0`, because an
+unknown key on a query string is SKIPPED rather than raised — dropping them
+would have looked like the setting silently stopped working.
 
 Two placement rules the markup depends on:
 

@@ -28,7 +28,13 @@ DEFAULTS = {
     'show_status': True,     # "Waiting for controller data..." text
     'show_labels': True,     # A/B/X/Y/Z/ST/L/R glyphs on the controller
     'show_keyline': True,    # black outline behind every stroke and glyph
-    'show_idle_fill': False, # dark fill inside unpressed buttons
+    # Dark fill inside unpressed buttons, 0..1. This is an OPACITY rather than
+    # a switch because 0 already means off — a separate `show_idle_fill` would
+    # add a second way to say the same thing, and the state where it is on at
+    # zero opacity has no meaning. The old boolean spellings still parse (see
+    # ALIASES and _coerce_opacity), so a URL saying `idlefill=1` keeps working
+    # and means what it always meant.
+    'idle_fill_opacity': 0.0,
 }
 
 # Short query-string aliases -> canonical setting key. The canonical keys work
@@ -41,8 +47,12 @@ ALIASES = {
     'status': 'show_status',
     'labels': 'show_labels',
     'keyline': 'show_keyline',
-    'idlefill': 'show_idle_fill',
-    'idle_fill': 'show_idle_fill',
+    'idlefill': 'idle_fill_opacity',
+    'idle_fill': 'idle_fill_opacity',
+    # The 1.3.0 spelling. Kept because it is in URLs and OBS sources already,
+    # and an unknown key is SKIPPED rather than raised on a query string — so
+    # dropping it would have looked like the setting silently stopped working.
+    'show_idle_fill': 'idle_fill_opacity',
 }
 
 _TRUE = {'1', 'true', 'yes', 'on'}
@@ -79,6 +89,30 @@ def _coerce_background(key, value):
     return text
 
 
+def _coerce_opacity(key, value):
+    """A 0..1 opacity that also accepts the boolean it replaced.
+
+    `idlefill=1` and `idlefill=0` mean the same thing under both readings, which
+    is what makes the rename safe; `true`/`false`/`on`/`off` are mapped so the
+    other boolean spellings survive too.
+    """
+    if isinstance(value, bool):
+        return 1.0 if value else 0.0
+    if isinstance(value, str):
+        text = value.strip().lower()
+        if text in _TRUE:
+            return 1.0
+        if text in _FALSE:
+            return 0.0
+    try:
+        opacity = float(value)
+    except (TypeError, ValueError):
+        raise ValueError(f"{key}: expected a number 0-1, got {value!r}")
+    if not 0.0 <= opacity <= 1.0:
+        raise ValueError(f"{key}: expected a number 0-1, got {value!r}")
+    return opacity
+
+
 COERCERS = {
     'port': _coerce_port,
     'background': _coerce_background,
@@ -87,7 +121,7 @@ COERCERS = {
     'show_status': _coerce_bool,
     'show_labels': _coerce_bool,
     'show_keyline': _coerce_bool,
-    'show_idle_fill': _coerce_bool,
+    'idle_fill_opacity': _coerce_opacity,
 }
 
 

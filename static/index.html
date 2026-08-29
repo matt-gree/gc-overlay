@@ -229,13 +229,20 @@ body.transparent-bg { background: transparent; }
 
    Tints of each button's own hue rather than one flat grey — dark enough to
    read as unlit next to the pressed colour, warm enough to keep the button's
-   identity when the letters are off. */
+   identity when the letters are off.
+
+   THE OPACITY RIDES IN THE COLOUR, not on `fill-opacity`. A pressed button
+   replaces `fill` outright (.grp-a.pressed .shape { fill: #00E196 }), so a
+   fill-opacity on the same elements would dim the LIT button by exactly the
+   amount the producer dialled the idle plate down — the one part of the
+   drawing that has to stay at full strength. Alpha inside each tint touches
+   only the idle value, and the pressed colour is written without one. */
 #controller-svg.idle-fill {
-  --idle-neutral: #1E1E24;
-  --idle-a: #0D2B22;
-  --idle-b: #2E1414;
-  --idle-z: #241436;
-  --idle-gold: #2B2209;
+  --idle-neutral: rgb(30 30 36 / var(--idle-alpha, 1));
+  --idle-a: rgb(13 43 34 / var(--idle-alpha, 1));
+  --idle-b: rgb(46 20 20 / var(--idle-alpha, 1));
+  --idle-z: rgb(36 20 54 / var(--idle-alpha, 1));
+  --idle-gold: rgb(43 34 9 / var(--idle-alpha, 1));
 }
 
 /* Keyline off — dropping the whole halo layer takes every cloned stroke with
@@ -303,6 +310,7 @@ body.transparent-bg { background: transparent; }
 }
 .setting-row button:hover { background: #333366; }
 .setting-row input[type=checkbox] { cursor: pointer; }
+.setting-value { min-width: 34px; text-align: right; color: #AAAAAA; }
 .settings-foot { margin-top: auto; color: #555555; font-size: 11px; }
 </style>
 </head>
@@ -466,7 +474,8 @@ body.transparent-bg { background: transparent; }
     </div>
     <div class="setting-row">
       <label>Idle fill:</label>
-      <input type="checkbox" id="idle-fill-check">
+      <input type="range" id="idle-fill-range" min="0" max="100" step="5">
+      <span id="idle-fill-value" class="setting-value">0%</span>
     </div>
     <div class="setting-row">
       <label></label>
@@ -496,7 +505,8 @@ body.transparent-bg { background: transparent; }
   const statusCheck = $('status-check');
   const labelsCheck = $('labels-check');
   const keylineCheck = $('keyline-check');
-  const idleFillCheck = $('idle-fill-check');
+  const idleFillRange = $('idle-fill-range');
+  const idleFillValue = $('idle-fill-value');
   const calibrateBtn = $('calibrate-btn');
 
   // Sticks — travel splits the difference between the gate's notches
@@ -561,7 +571,13 @@ body.transparent-bg { background: transparent; }
     portLabel.classList.toggle('hidden', !cfg.show_port_label);
     svgEl.classList.toggle('no-labels', !cfg.show_labels);
     svgEl.classList.toggle('no-keyline', !cfg.show_keyline);
-    svgEl.classList.toggle('idle-fill', !!cfg.show_idle_fill);
+    // Class AND variable. At 0 the class comes off so every idle shape falls
+    // back to `fill: none` — the same hollow drawing as before this was a
+    // setting — rather than painting a fully transparent plate that is only
+    // incidentally invisible.
+    const alpha = Number(cfg.idle_fill_opacity) || 0;
+    svgEl.classList.toggle('idle-fill', alpha > 0);
+    svgEl.style.setProperty('--idle-alpha', String(alpha));
     portLabel.textContent = 'P' + cfg.port;
 
     // Keep the panel controls in sync with whatever drove the change.
@@ -571,7 +587,8 @@ body.transparent-bg { background: transparent; }
     statusCheck.checked = !!cfg.show_status;
     labelsCheck.checked = !!cfg.show_labels;
     keylineCheck.checked = !!cfg.show_keyline;
-    idleFillCheck.checked = !!cfg.show_idle_fill;
+    idleFillRange.value = String(Math.round(alpha * 100));
+    idleFillValue.textContent = Math.round(alpha * 100) + '%';
 
     if (!cfg.show_gear && settingsOpen) {
       settingsOpen = false;
@@ -611,8 +628,11 @@ body.transparent-bg { background: transparent; }
     setLocal({ show_keyline: keylineCheck.checked });
   });
 
-  idleFillCheck.addEventListener('change', () => {
-    setLocal({ show_idle_fill: idleFillCheck.checked });
+  // `input`, not `change`: a slider is dragged, and waiting for release makes
+  // the one setting you tune by eye the one that gives no feedback while you
+  // tune it.
+  idleFillRange.addEventListener('input', () => {
+    setLocal({ idle_fill_opacity: Number(idleFillRange.value) / 100 });
   });
 
   labelsCheck.addEventListener('change', () => {

@@ -82,7 +82,7 @@ python main.py --no-port-label    # Hide the "P1" label
 python main.py --no-status        # Hide the "Waiting for controller data..." text
 python main.py --no-labels        # Hide the A/B/X/Y/Z/ST/L/R letters
 python main.py --no-keyline       # Drop the black keyline behind every stroke
-python main.py --idle-fill        # Fill unpressed buttons with a dark tint
+python main.py --idle-fill 0.5    # Fill unpressed buttons, 0-1 (0 = off)
 ```
 
 Then either:
@@ -139,7 +139,7 @@ http://localhost:8069?bg=transparent&gear=0&portlabel=0&status=0&labels=0&idlefi
 
 ### Overlay Controls
 
-- **Settings gear** (bottom-left): Switch controller port, toggle background, show/hide the port label, status text, button letters, keyline and idle fill, calibrate sticks
+- **Settings gear** (bottom-left): Switch controller port, toggle background, show/hide the port label, status text, button letters and keyline, dial the idle fill, calibrate sticks
 - **Number keys 1-4**: Quick switch between controller ports
 - **C key**: Recalibrate stick centers
 
@@ -162,9 +162,11 @@ Display settings can be set three ways, each layering on the one before:
 | `show_status` | `status` | boolean | `true` |
 | `show_labels` | `labels` | boolean | `true` |
 | `show_keyline` | `keyline` | boolean | `true` |
-| `show_idle_fill` | `idlefill` | boolean | `false` |
+| `idle_fill_opacity` | `idlefill` | `0`–`1` | `0` |
 
-Booleans accept `1/0`, `true/false`, `yes/no`, `on/off`. The canonical key works
+Booleans accept `1/0`, `true/false`, `yes/no`, `on/off`. `idle_fill_opacity` is a
+number `0`–`1`, and accepts those same boolean spellings too (`idlefill=1` is full,
+`idlefill=0` is off) so URLs written against the 1.3.0 switch keep working. The canonical key works
 as a query param too, so `?gear=0` and `?show_gear=0` are equivalent. Unknown or
 malformed query params are ignored rather than breaking the page.
 
@@ -180,7 +182,7 @@ curl http://localhost:8069/api/settings
 # {"settings": {"port": 1, "background": "dark", "show_gear": true,
 #               "show_port_label": true, "show_status": true,
 #               "show_labels": true, "show_keyline": true,
-#               "show_idle_fill": false}, "clients": 1}
+#               "idle_fill_opacity": 0.0}, "clients": 1}
 ```
 
 **`POST /api/settings`** — apply a *partial* patch. Only the keys you send

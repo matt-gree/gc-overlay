@@ -189,8 +189,8 @@ def main():
         help='Drop the black keyline drawn behind every stroke and letter',
     )
     parser.add_argument(
-        '--idle-fill', action='store_true',
-        help='Fill unpressed buttons with a dark tint of their own colour',
+        '--idle-fill', type=float, default=0.0, metavar='OPACITY',
+        help='Opacity 0-1 of the dark fill inside unpressed buttons (default: 0, off)',
     )
     parser.add_argument(
         '--demo', action='store_true',
@@ -274,7 +274,7 @@ def main():
         'show_status': not args.no_status,
         'show_labels': not args.no_labels,
         'show_keyline': not args.no_keyline,
-        'show_idle_fill': args.idle_fill,
+        'idle_fill_opacity': args.idle_fill,
     })
 
     if args.demo:
