@@ -15,8 +15,16 @@ Requires the ``dolphin-memory-engine`` wheel: a ~340 KB compiled extension
 that vendors the memory-access core of aldelaro5's Dolphin Memory Engine.
 It is a library, not the GUI application — nothing is installed on the
 producer's machine and no Dolphin build change is needed.
+
+DME finds its target BY PROCESS NAME and ships stock Dolphin's list, which
+does not include Project Rio's renamed executable — so ``dolphin_process``
+finds the process first and names it through ``DME_DOLPHIN_PROCESS_NAME``.
+That variable is read into a static on the first hook attempt, so this
+adapter must not call ``dme.hook()`` before a process exists. See
+``_prepare_hook``.
 """
 
+import os
 import threading
 import time
 
@@ -28,6 +36,7 @@ import dolphin_memory_engine as dme
 from dolphin_memory_engine._dolphin_memory_engine import DolphinStatus
 
 from dolphin_common import FIELD_UPDATERS, DolphinPort, load_game_profile
+from dolphin_process import find_dolphin_process_name, process_list_is_readable
 
 
 # The GameCube disc header is mapped at 0x80000000; its first six bytes are
@@ -97,6 +106,11 @@ class DmeAdapter:
         self._last_status = None
         self._warned_game_id = False
 
+        # The name we committed to via DME_DOLPHIN_PROCESS_NAME, and whether
+        # we have said out loud that we are waiting for a process to appear.
+        self._hook_name = None
+        self._announced_wait = False
+
     def start(self):
         """Start the polling thread. Hooks lazily, and retries forever."""
         print(
@@ -130,10 +144,41 @@ class DmeAdapter:
         pass
 
     def _report_status(self, status):
-        """Log status changes once, rather than every tick."""
+        """Log status changes once, rather than every tick.
+
+        The two failure readings are sharpened by what discovery already
+        knows. Once we have FOUND a process and handed DME its name,
+        ``notRunning`` can no longer mean "no Dolphin" — it means the name
+        we committed to on the first hook is not the one running now, which
+        is unfixable in this process because DME caches it in a static. And
+        ``noEmu`` stops meaning only "no game booted": on Windows it is also
+        what a refused OpenProcess looks like, which is what happens when
+        Rio runs elevated and PRSH does not.
+        """
         if status == self._last_status:
             return
         self._last_status = status
+
+        if status == DolphinStatus.notRunning and self._hook_name:
+            running = find_dolphin_process_name()
+            if running and running != self._hook_name:
+                print(
+                    f"Dolphin process changed: hooked name is '{self._hook_name}' "
+                    f"but '{running}' is running now. dolphin-memory-engine caches "
+                    "that name for the life of the process — restart the overlay."
+                )
+            else:
+                print(f"Waiting for '{self._hook_name}' to start...")
+            return
+
+        if status == DolphinStatus.noEmu and self._hook_name:
+            print(
+                f"Found '{self._hook_name}' but could not read its memory. "
+                "Either no game is booted yet, or it is running elevated while "
+                "this overlay is not — run both as the same user."
+            )
+            return
+
         print({
             DolphinStatus.hooked: "Hooked into Dolphin. Reading controller data.",
             DolphinStatus.notRunning: "Waiting for Dolphin/Project Rio to start...",
@@ -163,12 +208,52 @@ class DmeAdapter:
                 f"'{self._expected_game_id}'. Controller data will be wrong."
             )
 
+    def _prepare_hook(self):
+        """Name the process for DME, and say whether hooking is worth trying.
+
+        Everything about the ordering here is forced by one line of DME:
+        ``static const char* const s_dolphinProcessName{getenv(...)}``. It is
+        read once per process, on the first findPID(), and it REPLACES the
+        default name list rather than extending it. So:
+
+          * we must not hook before a process exists, or the static is
+            captured as unset and Project Rio can never be found afterwards;
+          * once captured, the name is fixed for the run — hence the
+            ``_hook_name`` bookkeeping the status reporter reads.
+
+        Returns False to mean "nothing to hook yet, sleep and retry". A
+        platform whose process list we cannot read answers True and lets DME
+        try its own names, which is the behaviour this replaced.
+        """
+        if self._hook_name or not process_list_is_readable():
+            return True
+
+        name = find_dolphin_process_name()
+        if name is None:
+            if not self._announced_wait:
+                self._announced_wait = True
+                print("Waiting for Dolphin/Project Rio to start...")
+            return False
+
+        # Set before the first hook() of this process, never after.
+        os.environ['DME_DOLPHIN_PROCESS_NAME'] = name
+        self._hook_name = name
+        self._announced_wait = False
+        print(f"Found Dolphin process '{name}'; hooking.")
+        return True
+
     def _poll_loop(self):
         """Background thread: hook, then read the controller block each tick."""
         next_tick = time.monotonic()
 
         while self._running:
             if not dme.is_hooked():
+                if not self._prepare_hook():
+                    self.connected = False
+                    time.sleep(HOOK_RETRY_SECONDS)
+                    next_tick = time.monotonic()
+                    continue
+
                 dme.hook()
                 if not dme.is_hooked():
                     self.connected = False

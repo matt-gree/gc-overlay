@@ -266,7 +266,15 @@ def main():
         adapter = make_dolphin_adapter(transport, profile_path, args)
 
     adapter.start()
-    app = create_app(adapter, settings={
+
+    if args.demo:
+        mode = 'demo'
+    elif args.usb:
+        mode = 'usb'
+    else:
+        mode = transport
+
+    app = create_app(adapter, mode=mode, settings={
         'port': args.controller,
         'background': args.bg,
         'show_gear': not args.no_gear,
@@ -277,14 +285,9 @@ def main():
         'idle_fill_opacity': args.idle_fill,
     })
 
-    if args.demo:
-        mode = "DEMO"
-    elif args.usb:
-        mode = "USB"
-    else:
-        mode = f"DOLPHIN/{transport.upper()}"
+    banner = 'DEMO' if args.demo else 'USB' if args.usb else f"DOLPHIN/{mode.upper()}"
 
-    print(f"\n  GC Overlay [{mode}]")
+    print(f"\n  GC Overlay [{banner}]")
     print(f"  Controller port: {args.controller}")
     print(f"  Overlay URL:     http://localhost:{args.port}")
     print(f"  OBS Browser Source: http://localhost:{args.port}?bg=transparent (512x180)")

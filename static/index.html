@@ -688,7 +688,14 @@ body.transparent-bg { background: transparent; }
     if (!show) {
       if (!state.adapter_connected) {
         statusMain.textContent = 'Waiting for controller data...';
-        statusSub.textContent = 'Start the overlay before launching Dolphin';
+        // Per transport, because the remedies are opposites. memorywatcher
+        // connects at game boot and never retries, so the ORDER is the whole
+        // advice. dme polls for the process and re-hooks by itself, so that
+        // advice is not merely useless there — it sends a producer to restart
+        // a working overlay instead of booting a game.
+        statusSub.textContent = state.adapter_mode === 'dme'
+          ? 'Start Dolphin/Project Rio and boot a game'
+          : 'Start the overlay before launching Dolphin';
       } else {
         statusMain.textContent = 'No controller on Port ' + state.port;
         statusSub.textContent = 'Plug in a controller';

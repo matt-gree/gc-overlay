@@ -56,6 +56,38 @@ entitlement — the reason the MemoryWatcher path exists at all.
 Note `DolphinStatus` is **not** re-exported from `dolphin_memory_engine.__init__`;
 import it from `dolphin_memory_engine._dolphin_memory_engine`.
 
+**DME FINDS ITS TARGET BY PROCESS NAME, AND PROJECT RIO IS NOT ON ITS LIST.**
+`findPID()` matches `Dolphin.exe` / `DolphinQt2.exe` / `DolphinWx.exe` on Windows
+(`dolphin-emu` and friends on Linux) — a Dolphin fork that renames its executable
+is scanned past, so the transport reports `notRunning` forever and the overlay sits
+on "Waiting for controller data..." with Rio in front of it. macOS never saw this
+because MemoryWatcher connects to a socket and never asks what the process is
+called. `dolphin_process.py` enumerates processes itself (ctypes Toolhelp32 on
+Windows, `/proc/<pid>/comm` on Linux — the same things DME reads) and names the
+match through `DME_DOLPHIN_PROCESS_NAME`.
+
+**That variable has two traps, and both dictate the shape of `_prepare_hook`:**
+
+* It is read into a **static** on the first `findPID()`, so the value is captured
+  once per process and every later hook attempt reuses it. **Never call
+  `dme.hook()` before a process has been found** — doing so captures it unset and
+  Rio is unfindable for the rest of the run. That is why the poll loop refuses to
+  hook rather than hooking hopefully.
+* It **replaces** the default name list rather than extending it (a ternary in
+  DME's source), so discovery must also cover the names DME would have matched on
+  its own, or fixing Rio breaks stock Dolphin.
+
+A consequence worth stating: swapping Dolphin builds mid-session cannot work —
+restart the overlay. `_report_status` says so rather than repeating "waiting".
+
+Its other failure reading is sharpened too: once a process has been found,
+`noEmu` no longer means only "no game booted" — on Windows it is also what a
+refused `OpenProcess` looks like, i.e. Rio elevated while the overlay is not.
+
+Tests: `tests/test_dolphin_process.py`, `tests/test_dme_hook_order.py`. Run with
+gc-overlay's own venv (`./venv/bin/python -m pytest tests -q`); PRSH's suite has
+`testpaths = ["tests"]` at its root and does not reach a submodule.
+
 ### Source 2: Direct USB (gc_adapter.py) — IMPLEMENTED (--usb flag)
 Reads the Nintendo WUP-028 GameCube Controller Adapter directly over USB. Works when a physical controller is plugged into the local machine's adapter. Requires pyusb + libusb + GCAdapterDriver (macOS).
 

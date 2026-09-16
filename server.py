@@ -119,6 +119,11 @@ def _state_payload(app, port):
     state['type'] = 'state'
     state['port'] = port
     state['adapter_connected'] = adapter.connected
+    # The page's "no data yet" advice differs per transport and it has no
+    # other way to know which one is running: memorywatcher connects at game
+    # boot and never retries (so the overlay must be up FIRST), while dme
+    # polls for the process and re-hooks on its own.
+    state['adapter_mode'] = app['mode']
     return state
 
 
@@ -222,14 +227,17 @@ async def on_cleanup(app):
         await ws.close()
 
 
-def create_app(adapter, settings=None):
+def create_app(adapter, settings=None, mode='unknown'):
     """Create the aiohttp application.
 
     ``settings`` is a partial override of overlay_settings.DEFAULTS, used for
-    the CLI flags that seed the server defaults.
+    the CLI flags that seed the server defaults. ``mode`` is the transport
+    label already computed for the startup banner ('demo', 'usb',
+    'memorywatcher', 'dme'), passed through to clients in the state payload.
     """
     app = web.Application(middlewares=[api_cors_middleware])
     app['adapter'] = adapter
+    app['mode'] = mode
     app['settings'] = overlay_settings.defaults()
     app['settings'].update(settings or {})
     app['ws_clients'] = {}  # {WebSocketResponse: settings dict}

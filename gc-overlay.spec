@@ -36,6 +36,11 @@ a = Analysis(
         # Dolphin transports are imported lazily by main.resolve_transport,
         # so PyInstaller's static analysis cannot see this one.
         'dme_adapter',
+        # dme_adapter's own import, named explicitly rather than left to the
+        # recursive analysis of a hidden import: everything this module fixes
+        # is a Windows-only failure that presents as "the overlay just waits",
+        # and a missing module here would present the same way.
+        'dolphin_process',
         'dolphin_memory_engine',
         'dolphin_memory_engine._dolphin_memory_engine',
         # Optional USB backend — imported lazily by --usb mode.
